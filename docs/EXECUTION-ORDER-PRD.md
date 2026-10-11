@@ -2,7 +2,7 @@
 **Dokumen ID:** PRD-EXEC-ORDER
 **Status:** Aktif — basis urutan eksekusi sprint
 **Referensi:** `Visary-PRD.md`, `docs/PRD_VISARY_V2.md`, `docs/prds/PRD-SPRINT-01..10`
-**Basis status:** Verifikasi langsung kode `visary_app/lib` + `flutter analyze lib` + `flutter test` (2026-10-10); koreksi status S08/S09 + penambahan S10 (2026-10-11)
+**Basis status:** Verifikasi langsung kode `visary_app/lib` + `flutter analyze lib` + `flutter test` (2026-10-10); koreksi status S08/S09 + penambahan S10 (2026-10-11); S10 selesai + penambahan S11 (2026-10-11)
 
 ---
 
@@ -61,10 +61,11 @@ Catatan: S05 bernomar lebih kecil dari S06, tapi **S06 harus jalan duluan** kare
 | **S04** E2E QA | ✅ Selesai | `test/widget/`, `test/unit/state/`, `test/integration/database_test.dart` → `flutter test`: **All tests passed (73)** |
 | **S08** Dummy Elimination | ✅ Selesai | `export_dialog.dart` memanggil `AppState.exportClip()` (real, bukan simulasi); `outputDir` dari `getDownloadsDirectory()` + `FilePicker.getDirectoryPath()`; progress bar dari callback FFmpeg nyata; success → path file + tombol "Buka folder"; tidak ada hardcoded `C:\Users\...`; tidak ada dummy `review-kopi`/`42/60`/`0.58` di `lib/` |
 | **S09** Pro Timeline Editor | ✅ Selesai | `lib/widgets/pro_timeline.dart` (648 baris) — zoom/scroll, thumbnail strip, segment manipulation, snap, keyboard shortcut; ter-wire di `clip_editor_screen.dart:573`. Timeline lama (`timeline.dart`) jadi unused import. **5 lint issue tersisa** (1 warning unused import + 4 info `prefer_const`) — masuk DoD S10 |
-| **S10** Audio Track Mgmt | 📝 Draft — NEXT | PRD `PRD-SPRINT-10-AUDIO-TRACK-MANAGEMENT.md`. Phase 1 bounded (mute/extract/replace + sync preview + export mixing) + architecture hook Phase 2. Estimasi 3–4 hari |
+| **S10** Audio Track Mgmt | ✅ Selesai | `AssetType.audio`/`AudioMode`, Drift v2→v3, `renderClip` audioMode (muted/replacement + `-shortest` truncate), `muxPreviewAudio`, AudioPanel (mute/upload/extract/select), sync preview Approach 2, `ClipSegmentPlanner` hook. 91 test pass, analyze 0. Branch `feature/s10-audio-track-management`. Phase 2 (audio-context) deferred |
 | **S06** BYOK | ⏸️ Belum | — |
 | **S05** AI B-Roll | ⏸️ Belum | — |
 | **S07** UI Fidelity | ⏸️ Belum | — |
+| **S11** Speech Services | 📝 Draft | PRD `PRD-SPRINT-11-SPEECH-SERVICES.md`. Cloud ASR (tutup gap §3.1) + TTS (→ audio asset, integrasi S10). Extend `AiProviderService` transcribe/synthesize. Post-Gate G1. Estimasi 4–6 hari |
 
 Catatan: S04 (23 → 73 test) kini mencakup alur export. S08 export nyata sudah tervalidasi via `renderClip` + `extractSegment`. Gate G1 (validasi Windows 11) **belum dijalankan** — tetap wajib sebelum Phase 2 AI.
 
@@ -78,7 +79,7 @@ Catatan: S04 (23 → 73 test) kini mencakup alur export. S08 export nyata sudah 
 ### Step 2 — S09: Pro Timeline Editor ✅ DONE
 `ProTimeline` terintegrasi; menggantikan `NeoBrutalTimeline`. Sisa: 5 lint issue (bersih-bersih di S10 DoD).
 
-### Step 3 — S10: Audio Track Management (NEXT, prioritas tertinggi)
+### Step 3 — S10: Audio Track Management ✅ DONE
 **Target file:** `lib/models/models.dart`, `lib/state/app_state.dart`, `lib/services/video_service.dart`, `lib/screens/clip_editor_screen.dart`, `lib/widgets/export_dialog.dart`, `lib/data/local/*`, `test/*`
 
 Phase 1 (bounded, no AI):
