@@ -65,7 +65,7 @@ Catatan: S05 bernomar lebih kecil dari S06, tapi **S06 harus jalan duluan** kare
 | **S06** BYOK | ⏸️ Belum | — |
 | **S05** AI B-Roll | ⏸️ Belum | — |
 | **S07** UI Fidelity | ⏸️ Belum | — |
-| **S11** Speech Services | 📝 Draft | PRD `PRD-SPRINT-11-SPEECH-SERVICES.md`. Cloud ASR (tutup gap §3.1) + TTS (→ audio asset, integrasi S10). Extend `AiProviderService` transcribe/synthesize. Post-Gate G1. Estimasi 4–6 hari |
+| **S11** Speech Services | 📝 Draft (Phase 1) | PRD `PRD-SPRINT-11-SPEECH-SERVICES.md`. Phase 1: ASR via cloud (Tokonomix key, tutup gap §3.1) + provider custom OpenAI-compatible (base URL). TTS deferred (awaiting approval, §9). Post-Gate G1. Estimasi 3–4 hari |
 
 Catatan: S04 (23 → 73 test) kini mencakup alur export. S08 export nyata sudah tervalidasi via `renderClip` + `extractSegment`. Gate G1 (validasi Windows 11) **belum dijalankan** — tetap wajib sebelum Phase 2 AI.
 
