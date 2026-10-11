@@ -402,6 +402,125 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ─────────────────────── AUDIO TRACK (PRD-SPRINT-10) ──────────────────
+
+  /// Upload file audio eksternal → AssetItem(type: audio) di project.
+  /// File disalin ke workspace `<projectId>/audio/`. Mengembalikan aset.
+  Future<AssetItem> uploadAudioAsset(
+    String projectId, {
+    required String fileName,
+    String? filePath,
+  }) async {
+    final p = byId(projectId);
+    if (p == null) throw StateError('Project tidak ditemukan');
+    if (filePath == null || filePath.isEmpty) {
+      throw ArgumentError('filePath audio wajib');
+    }
+    final dir = await _workDir(projectId);
+    final audioDir = Directory('${dir.path}/audio');
+    if (!await audioDir.exists()) await audioDir.create(recursive: true);
+    final ext = _audioExt(fileName);
+    final id = 'a_au${DateTime.now().millisecondsSinceEpoch}';
+    final dest = '${audioDir.path}/$id.$ext';
+    await File(filePath).copy(dest);
+
+    final probe = await VideoService.probe(dest);
+    final asset = AssetItem(
+      id: id,
+      type: AssetType.audio,
+      title: fileName,
+      sourceFile: dest,
+      start: 0,
+      end: probe.durationSec,
+      durationSec: probe.durationSec,
+      audioFormat: probe.audioCodec ?? ext,
+    );
+    addAsset(projectId, asset);
+    return asset;
+  }
+
+  /// Ekstrak audio dari video sumber (rentang [start]–[end]) → AssetItem.
+  /// Default range = seluruh durasi video sumber.
+  Future<AssetItem> extractAudioAsset(
+    String projectId, {
+    double? start,
+    double? end,
+  }) async {
+    final p = byId(projectId);
+    if (p == null) throw StateError('Project tidak ditemukan');
+    final dur = p.probe?.durationSec ?? 0;
+    final s = start ?? 0;
+    final e = end ?? dur;
+    if (e <= s) throw ArgumentError('rentang waktu tidak valid');
+
+    final dir = await _workDir(projectId);
+    final audioDir = Directory('${dir.path}/audio');
+    if (!await audioDir.exists()) await audioDir.create(recursive: true);
+    final id = 'a_ex${DateTime.now().millisecondsSinceEpoch}';
+    final outPath = '${audioDir.path}/$id.aac';
+
+    final res = await VideoService.extractAudio(
+      sourcePath: p.filePath,
+      start: s,
+      end: e,
+      outputPath: outPath,
+    );
+    final asset = AssetItem(
+      id: id,
+      type: AssetType.audio,
+      title: 'Audio ${s.toStringAsFixed(0)}-${e.toStringAsFixed(0)}s',
+      sourceFile: res.path,
+      start: s,
+      end: e,
+      durationSec: res.durationSec,
+      audioFormat: res.format,
+    );
+    addAsset(projectId, asset);
+    return asset;
+  }
+
+  /// Set mode audio project (original/muted/replacement).
+  void setAudioMode(String projectId, AudioMode mode) {
+    final p = byId(projectId);
+    if (p == null) return;
+    _put(p.copyWith(audioMode: mode));
+  }
+
+  /// Pilih aset audio aktif sebagai pengganti + set mode replacement.
+  void setActiveAudioAsset(String projectId, String assetId) {
+    final p = byId(projectId);
+    if (p == null) return;
+    _put(p.copyWith(
+      audioMode: AudioMode.replacement,
+      activeAudioAssetId: assetId,
+    ));
+  }
+
+  /// Bangun file preview (video-mute + audio pengganti) untuk editor
+  /// (PRD-SPRINT-10 §3.2, Approach 2). Mengembalikan path preview, atau
+  /// null jika tidak ada audio pengganti aktif.
+  Future<String?> buildPreviewWithAudio(String projectId) async {
+    final p = byId(projectId);
+    if (p == null) return null;
+    final audio = p.activeAudioAsset;
+    if (audio == null) return null;
+    final dir = await _workDir(projectId);
+    final outPath = '${dir.path}/preview_audio.mp4';
+    await VideoService.muxPreviewAudio(
+      videoPath: p.filePath,
+      audioPath: audio.sourceFile,
+      outputPath: outPath,
+    );
+    return outPath;
+  }
+
+  /// Ekstensi file audio dari nama file (lowercase, tanpa titik).
+  String _audioExt(String fileName) {
+    final dot = fileName.lastIndexOf('.');
+    if (dot < 0 || dot == fileName.length - 1) return 'aac';
+    return fileName.substring(dot + 1).toLowerCase();
+  }
+
   // ─────────────────── B-ROLL RECOMMENDATION (PRD-SPRINT-05) ──────────────
 
   /// Enrich clip dengan keyword B-roll dari AI (bila BYOK aktif) atau
@@ -505,6 +624,9 @@ class AppState extends ChangeNotifier {
         .map((b) => BrollOverlay(b.startSec, b.endSec, b.overlayFilePath!))
         .toList();
     final useBroll = brollOverlays.isNotEmpty;
+    // Catatan: B-roll overlay + audio replacement belum digabung di Phase 1
+    // (renderWithBroll belum terima audioMode). S05 (B-roll) belum aktif,
+    // jadi cabang B-roll praktis tak tercapai saat ini.
 
     for (var i = 0; i < formats.length; i++) {
       final f = formats[i];
@@ -529,6 +651,8 @@ class AppState extends ChangeNotifier {
           format: f,
           hasAudio: p.probe?.hasAudio ?? false,
           blurPad: blurPad,
+          audioMode: p.audioMode,
+          replacementAudioPath: p.activeAudioAsset?.sourceFile,
           onProgress: (v) => onProgress?.call('Render ${f.label}', (i + v) / formats.length),
         );
       }
