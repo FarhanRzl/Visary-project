@@ -33,6 +33,7 @@ class _AssetLibraryScreenState extends State<AssetLibraryScreen> {
         AssetType.broll => VC.blue,
         AssetType.soundBite => VC.green,
         AssetType.ocrText => VC.pink,
+        AssetType.audio => VC.purple,
       };
 
   String _typeLabel(AssetType t) => switch (t) {
@@ -40,6 +41,7 @@ class _AssetLibraryScreenState extends State<AssetLibraryScreen> {
         AssetType.broll => 'B-ROLL',
         AssetType.soundBite => 'SOUND BITE',
         AssetType.ocrText => 'OCR TEXT',
+        AssetType.audio => 'AUDIO',
       };
 
   IconData _typeIcon(AssetType t) => switch (t) {
@@ -47,6 +49,7 @@ class _AssetLibraryScreenState extends State<AssetLibraryScreen> {
         AssetType.broll => Icons.image,
         AssetType.soundBite => Icons.volume_up,
         AssetType.ocrText => Icons.text_fields,
+        AssetType.audio => Icons.music_note,
       };
 
   @override

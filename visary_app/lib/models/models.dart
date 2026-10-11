@@ -66,6 +66,14 @@ class Project {
   final String? errorMessage;
   final String? thumbnailPath;
 
+  /// Mode audio aktif untuk playback & export (PRD-SPRINT-10 §2.1).
+  final AudioMode audioMode;
+
+  /// Id `AssetItem(type: audio)` yang aktif sebagai audio pengganti.
+  /// Wajib terisi saat `audioMode == AudioMode.replacement`; diabaikan
+  /// saat mode lain (sumber kebenaran adalah `audioMode`).
+  final String? activeAudioAssetId;
+
   const Project({
     required this.id,
     required this.name,
@@ -79,6 +87,8 @@ class Project {
     this.assets = const [],
     this.errorMessage,
     this.thumbnailPath,
+    this.audioMode = AudioMode.original,
+    this.activeAudioAssetId,
   });
 
   Project copyWith({
@@ -90,6 +100,8 @@ class Project {
     List<AssetItem>? assets,
     String? errorMessage,
     String? thumbnailPath,
+    AudioMode? audioMode,
+    String? activeAudioAssetId,
   }) => Project(
         id: id,
         name: name,
@@ -103,7 +115,17 @@ class Project {
         assets: assets ?? this.assets,
         errorMessage: errorMessage ?? this.errorMessage,
         thumbnailPath: thumbnailPath ?? this.thumbnailPath,
+        audioMode: audioMode ?? this.audioMode,
+        activeAudioAssetId: activeAudioAssetId ?? this.activeAudioAssetId,
       );
+
+  /// Aset audio pengganti yang aktif, atau null jika tidak ada / mode bukan replacement.
+  AssetItem? get activeAudioAsset {
+    if (audioMode != AudioMode.replacement || activeAudioAssetId == null) {
+      return null;
+    }
+    return assets.where((a) => a.id == activeAudioAssetId).firstOrNull;
+  }
 }
 
 class ClipPart {
@@ -163,7 +185,10 @@ class HookCandidate {
   });
 }
 
-enum AssetType { hook, broll, soundBite, ocrText }
+enum AssetType { hook, broll, soundBite, ocrText, audio }
+
+/// Mode audio untuk playback & export (PRD-SPRINT-10 §2.1).
+enum AudioMode { original, muted, replacement }
 
 /// Rekomendasi B-roll untuk segmen dengan gap visual (PRD-SPRINT-05 §3.1).
 /// Segmen dengan narasi kuat tapi visual monoton → kirim ke VLM/LLM untuk keyword
@@ -211,6 +236,12 @@ class AssetItem {
   final double start;
   final double end;
 
+  /// Durasi aset audio (detik) — hanya terisi untuk `AssetType.audio`.
+  final double? durationSec;
+
+  /// Format/codec audio (mp3/aac/wav/...) — null untuk aset non-audio.
+  final String? audioFormat;
+
   const AssetItem({
     required this.id,
     required this.type,
@@ -218,7 +249,12 @@ class AssetItem {
     required this.sourceFile,
     required this.start,
     required this.end,
+    this.durationSec,
+    this.audioFormat,
   });
+
+  /// Benarkah aset ini berupa audio.
+  bool get isAudio => type == AssetType.audio;
 }
 
 /// Representasi quota akun — PRD §4.9.
