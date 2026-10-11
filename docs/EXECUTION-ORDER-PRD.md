@@ -1,8 +1,8 @@
 # Execution Order PRD — Visary Desktop
 **Dokumen ID:** PRD-EXEC-ORDER
 **Status:** Aktif — basis urutan eksekusi sprint
-**Referensi:** `Visary-PRD.md`, `docs/PRD_VISARY_V2.md`, `docs/prds/PRD-SPRINT-01..10`
-**Basis status:** Verifikasi langsung kode `visary_app/lib` + `flutter analyze lib` + `flutter test` (2026-10-10); koreksi status S08/S09 + penambahan S10 (2026-10-11); S10 selesai + penambahan S11 (2026-10-11)
+**Referensi:** `Visary-PRD.md`, `docs/PRD_VISARY_V2.md`, `docs/prds/PRD-SPRINT-01..12`
+**Basis status:** Verifikasi langsung kode `visary_app/lib` + `flutter analyze lib` + `flutter test` (2026-10-10); koreksi status S08/S09 + penambahan S10 (2026-10-11); S10 selesai + penambahan S11 (2026-10-11); S11 Phase 1 done + S12 draft (2026-10-11)
 
 ---
 
@@ -66,6 +66,7 @@ Catatan: S05 bernomar lebih kecil dari S06, tapi **S06 harus jalan duluan** kare
 | **S05** AI B-Roll | ⏸️ Belum | — |
 | **S07** UI Fidelity | ⏸️ Belum | — |
 | **S11** Speech Services | ✅ Phase 1 done | PRD `PRD-SPRINT-11-SPEECH-SERVICES.md`. Phase 1: provider custom OpenAI-compatible (Tokonomix base URL) + `transcribe` (multipart verbose_json word-ts) + Transcript/WordToken model + `toSrt` + `VideoSignals.transcript` + `JobStage.asr` real + caption editor real words. TTS deferred (§9, awaiting approval). 103 test, analyze 0. Remaining: hook-scoring word enrichment, Gemini inline-audio, chunking. |
+| **S12** Transcript Studio | 📝 Draft | PRD `PRD-SPRINT-12-TRANSCRIPT-STUDIO.md`. Transcript dipisah jadi fitur standalone: dedicated screen, view/edit/persist, export .srt/.txt/.vtt, chunking audio >25MB (video panjang), search + jump-to-timecode, language selection. Caption & Reframe jadi consumer. Depends S11 (done). Estimasi 3–5 hari. |
 
 Catatan: S04 (23 → 73 test) kini mencakup alur export. S08 export nyata sudah tervalidasi via `renderClip` + `extractSegment`. Gate G1 (validasi Windows 11) **belum dijalankan** — tetap wajib sebelum Phase 2 AI.
 
