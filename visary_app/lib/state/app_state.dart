@@ -295,7 +295,7 @@ class AppState extends ChangeNotifier {
         project = project.copyWith(stage: JobStage.asr, progress: 0.45);
         _put(project);
         try {
-          final asrAudio = '${dir.path}/asr_input.aac';
+          final asrAudio = '${dir.path}/asr_input.m4a';
           await VideoService.extractAudio(
             sourcePath: filePath,
             start: 0,
