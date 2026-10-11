@@ -268,9 +268,13 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
                   ),
                   const Spacer(),
                   // Filename in center
-                  Text(
-                    fileName,
-                    style: VT.mono(13, color: VC.muted),
+                  Flexible(
+                    child: Text(
+                      fileName,
+                      style: VT.mono(13, color: VC.muted),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
                   ),
                   const Spacer(),
                   // Navigasi Hook Finder & Caption Reframe
