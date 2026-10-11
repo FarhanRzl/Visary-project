@@ -577,8 +577,15 @@ class AppState extends ChangeNotifier {
     final audio = p.activeAudioAsset;
     if (audio == null) throw StateError('Tidak ada audio pengganti aktif');
 
-    final signals = _signals[projectId];
-    if (signals == null) throw StateError('Signals belum di-scan');
+    // Signals mungkin belum ada di memori (app restart). Buat minimal
+    // VideoSignals supaya transkripsi + resequence bisa jalan. Resequencer
+    // akan fallback ke segmen 3s bila shots kosong.
+    var signals = _signals[projectId];
+    if (signals == null) {
+      final dur = p.probe?.durationSec ?? 0;
+      signals = VideoSignals(shots: [0, dur], energy: const [], duration: dur);
+      _signals[projectId] = signals;
+    }
 
     final t = await aiService.transcribe(audioFilePath: audio.sourceFile);
     signals.transcript = t;
