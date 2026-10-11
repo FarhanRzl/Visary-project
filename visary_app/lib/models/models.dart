@@ -302,6 +302,9 @@ class Transcript {
     return buf.toString();
   }
 
+  /// Plain text transcript (fullText) — PRD-SPRINT-12.
+  String toTxt() => fullText;
+
   static String _srtTime(double sec) {
     final h = (sec ~/ 3600).toInt();
     final m = ((sec % 3600) ~/ 60).toInt();

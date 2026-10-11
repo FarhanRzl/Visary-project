@@ -1,6 +1,10 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/tokens.dart';
 import '../widgets/brutal.dart';
@@ -40,6 +44,122 @@ class _CaptionReframeScreenState extends State<CaptionReframeScreen> {
 
   String get _captionText =>
       _words.isEmpty ? '' : _words.join(' ');
+
+  Transcript? get _transcript =>
+      context.read<AppState>().signalsOf(widget.projectId)?.transcript;
+
+  /// Export transcript ke file .srt atau .txt — PRD-SPRINT-12.
+  Future<void> _exportTranscript(String format) async {
+    final t = _transcript;
+    if (t == null || t.isEmpty) return;
+
+    // Capture project name sebelum async gap (avoid context across async).
+    final project = context.read<AppState>().byId(widget.projectId);
+    final rawName = project?.name ?? 'project';
+    final safeName = rawName.replaceAll(RegExp(r'[^\w\-]'), '_');
+
+    final folder = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Pilih Folder Export Transcript',
+    );
+    if (folder == null) return; // user cancel
+
+    final ext = format;
+    final filePath = '$folder/${safeName}_transcript.$ext';
+
+    try {
+      final content = format == 'srt' ? t.toSrt() : t.toTxt();
+      await File(filePath).writeAsString(content);
+      if (mounted) {
+        showBrutalSnack(context, 'Transcript tersimpan: $filePath');
+      }
+    } catch (e) {
+      if (mounted) {
+        showBrutalSnack(context, 'Gagal menyimpan transcript: $e',
+            color: VC.pink);
+      }
+    }
+  }
+
+  /// Build export section widgets — PRD-SPRINT-12.
+  List<Widget> _buildExportSection() {
+    final t = _transcript;
+    if (t == null || t.isEmpty) {
+      return [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: VC.bg,
+            border: Border.all(color: VC.muted, width: 1.5),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.info_outline, size: 16, color: VC.muted),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                    'Belum ada transcript. Jalankan ASR terlebih dahulu.',
+                    style: VT.body(11, color: VC.muted)),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    final widgets = <Widget>[];
+
+    // Warning: transcript tanpa timestamp → .SRT kosong.
+    if (t.words.isEmpty && t.fullText.isNotEmpty) {
+      widgets.add(Container(
+        padding: const EdgeInsets.all(10),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: VC.yellow,
+          border: Border.all(color: VC.ink, width: 1.5),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded,
+                size: 14, color: VC.ink),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                  'Transcript tanpa timestamp. .SRT kosong — gunakan .TXT.',
+                  style: VT.mono(10, color: VC.ink)),
+            ),
+          ],
+        ),
+      ));
+    }
+
+    widgets.add(Row(
+      children: [
+        Expanded(
+          child: BButton(
+            label: '.SRT',
+            icon: Icons.subtitles,
+            kind: BtnKind.outline,
+            expand: true,
+            onTap: (t.words.isNotEmpty)
+                ? () => _exportTranscript('srt')
+                : null,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: BButton(
+            label: '.TXT',
+            icon: Icons.description,
+            kind: BtnKind.outline,
+            expand: true,
+            onTap: () => _exportTranscript('txt'),
+          ),
+        ),
+      ],
+    ));
+
+    return widgets;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -353,6 +473,12 @@ class _CaptionReframeScreenState extends State<CaptionReframeScreen> {
                           }).toList(),
                         ),
                       ),
+
+                      const Divider(color: VC.ink, thickness: 2),
+
+                      // Export Transcript — PRD-SPRINT-12
+                      Text('EXPORT TRANSCRIPT', style: VT.mono(11)),
+                      ..._buildExportSection(),
                     ], 16),
                   ),
                 ),
