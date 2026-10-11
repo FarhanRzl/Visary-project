@@ -134,7 +134,12 @@ class _AudioPanelState extends State<AudioPanel> {
 
       return Padding(
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-        child: Column(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -232,7 +237,9 @@ class _AudioPanelState extends State<AudioPanel> {
                 ),
             ],
           ],
+          ),
         ),
+      ),
       );
     });
   }
