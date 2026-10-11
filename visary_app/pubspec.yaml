@@ -1,0 +1,36 @@
+name: visary
+description: "Visary — AI video clip generator untuk short-form content creator."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.1.2
+  google_fonts: ^6.3.3
+  file_picker: ^8.1.4
+  video_player: ^2.9.5
+  fvp: ^0.39.0
+  shared_preferences: ^2.5.6
+  drift: ^2.35.2
+  drift_flutter: ^0.3.1
+  path_provider: ^2.1.6
+  sqlite3_flutter_libs: ^0.6.0+eol
+  path: ^1.9.0
+  flutter_secure_storage: ^10.3.4
+  http: ^1.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  drift_dev: any
+  build_runner: any
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/videos/sample.mp4
