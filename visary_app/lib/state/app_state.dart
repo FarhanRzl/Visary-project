@@ -289,6 +289,25 @@ class AppState extends ChangeNotifier {
       // 3. Sinyal: shot boundary + energi audio.
       final signals = await LocalAnalyzer.scan(filePath, probe);
       _signals[id] = signals;
+
+      // 3b. ASR (transkripsi audio) — cloud via provider (PRD-SPRINT-11).
+      if (probe.hasAudio) {
+        project = project.copyWith(stage: JobStage.asr, progress: 0.45);
+        _put(project);
+        try {
+          final asrAudio = '${dir.path}/asr_input.aac';
+          await VideoService.extractAudio(
+            sourcePath: filePath,
+            start: 0,
+            end: probe.durationSec,
+            outputPath: asrAudio,
+          );
+          signals.transcript = await aiService.transcribe(audioFilePath: asrAudio);
+        } catch (e) {
+          debugPrint('ASR gagal (non-fatal, fallback tanpa transkrip): $e');
+        }
+      }
+
       project = project.copyWith(progress: 0.6, stage: JobStage.llmSelect);
       _put(project);
 

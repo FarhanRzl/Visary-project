@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../state/app_state.dart';
 import '../theme/tokens.dart';
 import '../widgets/brutal.dart';
 
 /// Caption & Reframe Screen — canvas `i7Nwe` (06-caption-reframe.png)
 class CaptionReframeScreen extends StatefulWidget {
-  const CaptionReframeScreen({super.key, required this.clipTitle});
-  final String clipTitle;
+  const CaptionReframeScreen({super.key, required this.projectId});
+  final String projectId;
 
   @override
   State<CaptionReframeScreen> createState() => _CaptionReframeScreenState();
@@ -18,19 +20,30 @@ class _CaptionReframeScreenState extends State<CaptionReframeScreen> {
   int _captionPreset = 0; // 0 = Pop Kuning, 1 = Bold Putih, 2 = Pink Box
   int _captionPosition = 1; // 0 = Atas, 1 = Tengah (karena OCR warning), 2 = Bawah
 
-  /// Belum ada ASR (backend AI belum tersedia, PRD §7.5) — kata transkrip
-  /// diturunkan dari judul clip asli, bukan teks karangan.
-  late final List<String> _words = widget.clipTitle
-      .split(RegExp(r'\s+'))
-      .where((w) => w.isNotEmpty)
-      .toList();
+  /// Kata caption: dari transkripsi ASR nyata bila tersedia (PRD-SPRINT-11),
+  /// fallback ke nama project split bila ASR belum aktif/gagal.
+  List<String> get _words {
+    final state = context.read<AppState>();
+    final transcript = state.signalsOf(widget.projectId)?.transcript;
+    if (transcript != null && transcript.words.isNotEmpty) {
+      return transcript.words
+          .map((w) => w.word.trim())
+          .where((w) => w.isNotEmpty)
+          .toList();
+    }
+    final name = state.byId(widget.projectId)?.name ?? '';
+    return name.isEmpty
+        ? <String>[]
+        : name.split(' ').where((w) => w.isNotEmpty).toList();
+  }
   int _activeWordIdx = 0;
 
   String get _captionText =>
-      _words.isEmpty ? widget.clipTitle : _words.join(' ');
+      _words.isEmpty ? '' : _words.join(' ');
 
   @override
   Widget build(BuildContext context) {
+    final project = context.read<AppState>().byId(widget.projectId);
     return Scaffold(
       backgroundColor: VC.bg,
       body: Column(
@@ -64,7 +77,7 @@ class _CaptionReframeScreenState extends State<CaptionReframeScreen> {
                 ),
                 const SizedBox(width: 20),
                 Text(
-                  'CAPTION & REFRAME · ${widget.clipTitle.toUpperCase()}',
+                  'CAPTION & REFRAME · ${(project?.name ?? '').toUpperCase()}',
                   style: VT.display(15),
                 ),
                 const Spacer(),
