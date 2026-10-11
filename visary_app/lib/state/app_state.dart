@@ -587,7 +587,20 @@ class AppState extends ChangeNotifier {
       _signals[projectId] = signals;
     }
 
-    final t = await aiService.transcribe(audioFilePath: audio.sourceFile);
+    // Convert audio pengganti ke .m4a (AAC in MP4 container) untuk
+    // kompatibilitas ASR API (Groq/OpenAI tidak support raw .aac).
+    final dir = await _workDir(projectId);
+    final asrAudioPath = '${dir.path}/asr_replacement.m4a';
+    final audioDur = audio.durationSec ?? (p.probe?.durationSec ?? 60);
+    await VideoService.extractSegment(
+      sourcePath: audio.sourceFile,
+      start: 0,
+      end: audioDur,
+      outputPath: asrAudioPath,
+      audioOnly: true,
+    );
+
+    final t = await aiService.transcribe(audioFilePath: asrAudioPath);
     signals.transcript = t;
     debugPrint('[S13] transkrip audio pengganti: ${t.words.length} words, '
         'provider=${t.provider}');
