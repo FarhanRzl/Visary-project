@@ -136,8 +136,18 @@ class Project {
 class ClipPart {
   final double start;
   final double end;
-  const ClipPart(this.start, this.end);
-  double get duration => end - start;
+
+  /// Faktor speed video (1.0 = normal, 0.5 = slowmo 2x, 2.0 = 2x cepat).
+  /// Diaplikasikan via FFmpeg `setpts=(PTS-STARTPTS)/speed`. PRD-SPRINT-13.
+  final double speed;
+
+  const ClipPart(this.start, this.end, [this.speed = 1.0]);
+
+  /// Durasi di source video (sebelum speed adjustment).
+  double get sourceDuration => end - start;
+
+  /// Durasi output setelah speed adjustment.
+  double get duration => sourceDuration / speed;
 }
 
 class Clip {

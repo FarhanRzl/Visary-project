@@ -290,7 +290,9 @@ class VideoService {
       final p = parts[i];
       final s = p.start.toStringAsFixed(3);
       final e = p.end.toStringAsFixed(3);
-      fc.write('[0:v]trim=start=$s:end=$e,setpts=PTS-STARTPTS[v$i];');
+      // Speed adjustment: setpts=(PTS-STARTPTS)/speed. PRD-SPRINT-13.
+      final sp = p.speed == 1.0 ? '' : '/${p.speed.toStringAsFixed(4)}';
+      fc.write('[0:v]trim=start=$s:end=$e,setpts=(PTS-STARTPTS)$sp[v$i];');
       vLabels.add('[v$i]');
       if (useSourceAudio) {
         fc.write('[0:a]atrim=start=$s:end=$e,asetpts=PTS-STARTPTS,aresample=async=1000[a$i];');

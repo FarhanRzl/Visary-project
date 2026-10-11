@@ -55,7 +55,8 @@ class Resequencer {
     return segs.isEmpty ? [(0, duration)] : segs;
   }
 
-  /// Build ClipParts: setiap audio segment → satu video segment (cycle).
+  /// Build ClipParts: setiap audio segment → satu video segment dengan
+  /// speed adjustment supaya durasi video match audio. PRD-SPRINT-13.
   List<ClipPart> buildParts({
     required List<double> cutPoints,
     required List<(double, double)> videoSegments,
@@ -71,14 +72,19 @@ class Resequencer {
     for (var i = 0; i < cutPoints.length - 1; i++) {
       final audioStart = cutPoints[i];
       final audioEnd = cutPoints[i + 1];
-      final segDur = audioEnd - audioStart;
-      if (segDur <= 0) continue;
+      final audioDur = audioEnd - audioStart;
+      if (audioDur <= 0) continue;
 
       final (vStart, vEnd) = videoSegments[segIdx % videoSegments.length];
       final vDur = vEnd - vStart;
-      final takeDur = segDur < vDur ? segDur : vDur;
+      if (vDur <= 0) continue;
 
-      parts.add(ClipPart(vStart, vStart + takeDur));
+      // Speed-adjust: match video segment duration ke audio segment duration.
+      // speed > 1 = percepat, speed < 1 = slowmo. Clamp 0.25x–4x.
+      final rawSpeed = vDur / audioDur;
+      final speed = rawSpeed.clamp(0.25, 4.0);
+
+      parts.add(ClipPart(vStart, vEnd, speed));
       segIdx++;
     }
 
