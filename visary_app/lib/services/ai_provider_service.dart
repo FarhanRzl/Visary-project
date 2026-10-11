@@ -8,7 +8,8 @@ enum AiProviderType {
   server('Server Visary (Default Kuota)'),
   gemini('Google Gemini API'),
   openai('OpenAI API'),
-  groq('Groq Cloud API');
+  groq('Groq Cloud API'),
+  custom('OpenAI-Compatible (custom base URL)');
 
   const AiProviderType(this.displayName);
   final String displayName;
@@ -61,6 +62,18 @@ class SecureKeyStorage {
   Future<void> saveGroqKey(String key) => write(keyGroq, key);
   Future<String?> getGroqKey() => read(keyGroq);
 
+  // Custom OpenAI-compatible provider (e.g. Tokonomix) — PRD-SPRINT-11 §2.1.
+  static const keyCustomApi = 'byok_custom_api_key';
+  static const keyCustomBaseUrl = 'byok_custom_base_url';
+  static const keyCustomModel = 'byok_custom_model';
+
+  Future<void> saveCustomKey(String key) => write(keyCustomApi, key);
+  Future<String?> getCustomKey() => read(keyCustomApi);
+  Future<void> saveCustomBaseUrl(String url) => write(keyCustomBaseUrl, url);
+  Future<String?> getCustomBaseUrl() => read(keyCustomBaseUrl);
+  Future<void> saveCustomModel(String model) => write(keyCustomModel, model);
+  Future<String?> getCustomModel() => read(keyCustomModel);
+
   Future<void> setByokEnabled(bool enabled) => write(keyByokEnabled, enabled.toString());
   Future<bool> getByokEnabled() async {
     final v = await read(keyByokEnabled);
@@ -94,8 +107,9 @@ class AiProviderService {
   /// Menguji validitas koneksi API key langsung ke endpoint provider.
   Future<ConnectionTestResult> testConnection(
     AiProviderType provider,
-    String apiKey,
-  ) async {
+    String apiKey, {
+    String? baseUrl,
+  }) async {
     final key = apiKey.trim();
     if (key.isEmpty) {
       return const ConnectionTestResult(
@@ -195,6 +209,39 @@ class AiProviderService {
             );
           }
 
+        case AiProviderType.custom:
+          final b = (baseUrl ?? '').trim();
+          if (b.isEmpty) {
+            return const ConnectionTestResult(
+              success: false,
+              message: 'Base URL wajib untuk provider custom.',
+            );
+          }
+          final modelsUrl = b.endsWith('/') ? '${b}models' : '$b/models';
+          final res = await _client.get(
+            Uri.parse(modelsUrl),
+            headers: {'Authorization': 'Bearer $key'},
+          );
+          if (res.statusCode == 200) {
+            return ConnectionTestResult(
+              success: true,
+              message: 'Koneksi ke $b berhasil! Key valid.',
+              statusCode: 200,
+            );
+          } else if (res.statusCode == 401 || res.statusCode == 403) {
+            return ConnectionTestResult(
+              success: false,
+              message: 'API Key tidak valid atau izin ditolak (HTTP ${res.statusCode}).',
+              statusCode: res.statusCode,
+            );
+          } else {
+            return ConnectionTestResult(
+              success: false,
+              message: 'Gagal menghubungi $b: HTTP ${res.statusCode}.',
+              statusCode: res.statusCode,
+            );
+          }
+
         case AiProviderType.server:
           return const ConnectionTestResult(
             success: true,
@@ -226,6 +273,13 @@ class AiProviderService {
       case AiProviderType.groq:
         final k = await storage.getGroqKey();
         return k != null && k.trim().isNotEmpty;
+      case AiProviderType.custom:
+        final k = await storage.getCustomKey();
+        final b = await storage.getCustomBaseUrl();
+        return k != null &&
+            k.trim().isNotEmpty &&
+            b != null &&
+            b.trim().isNotEmpty;
       case AiProviderType.server:
         return false;
     }
@@ -300,6 +354,39 @@ class AiProviderService {
           return data['choices']?[0]?['message']?['content'] ?? '';
         } else {
           throw Exception('${provider.name.toUpperCase()} API Error ${res.statusCode}: ${res.body}');
+        }
+
+      case AiProviderType.custom:
+        final key = (await storage.getCustomKey()) ?? '';
+        final base = ((await storage.getCustomBaseUrl()) ?? '').trim();
+        final model = (await storage.getCustomModel()) ?? 'gpt-4o-mini';
+        if (base.isEmpty) {
+          throw StateError('Base URL custom belum diisi (Settings).');
+        }
+        final chatUrl = base.endsWith('/')
+            ? '${base}chat/completions'
+            : '$base/chat/completions';
+        final res = await _client.post(
+          Uri.parse(chatUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $key',
+          },
+          body: jsonEncode({
+            'model': model,
+            'messages': [
+              if (systemInstruction != null)
+                {'role': 'system', 'content': systemInstruction},
+              {'role': 'user', 'content': prompt},
+            ],
+          }),
+        );
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          return data['choices']?[0]?['message']?['content'] ?? '';
+        } else {
+          throw Exception(
+              'Custom provider ($base) Error ${res.statusCode}: ${res.body}');
         }
 
       case AiProviderType.server:

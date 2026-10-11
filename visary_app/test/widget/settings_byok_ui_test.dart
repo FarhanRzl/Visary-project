@@ -51,8 +51,8 @@ void main() {
     expect(find.text('GEMINI API'), findsOneWidget);
     expect(find.text('OPENAI API'), findsOneWidget);
 
-    // Verifikasi tombol TES KONEKSI
-    expect(find.text('TES KONEKSI'), findsNWidgets(3));
+    // Verifikasi tombol TES KONEKSI (3 provider fixed + 1 custom = 4)
+    expect(find.text('TES KONEKSI'), findsNWidgets(4));
 
     // Verifikasi tombol SIMPAN KONFIGURASI API
     expect(find.text('SIMPAN KONFIGURASI API'), findsOneWidget);

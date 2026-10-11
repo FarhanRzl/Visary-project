@@ -46,6 +46,9 @@ class AppState extends ChangeNotifier {
   String geminiApiKey = '';
   String openAiApiKey = '';
   String groqApiKey = '';
+  String customApiKey = '';
+  String customBaseUrl = '';
+  String customModel = 'gpt-4o-mini';
 
   bool get isByokActive => byokEnabled && activeAiProvider != AiProviderType.server;
 
@@ -66,6 +69,9 @@ class AppState extends ChangeNotifier {
     geminiApiKey = (await aiService.storage.getGeminiKey()) ?? '';
     openAiApiKey = (await aiService.storage.getOpenAiKey()) ?? '';
     groqApiKey = (await aiService.storage.getGroqKey()) ?? '';
+    customApiKey = (await aiService.storage.getCustomKey()) ?? '';
+    customBaseUrl = (await aiService.storage.getCustomBaseUrl()) ?? '';
+    customModel = (await aiService.storage.getCustomModel()) ?? 'gpt-4o-mini';
     notifyListeners();
   }
 
@@ -76,18 +82,31 @@ class AppState extends ChangeNotifier {
     String? geminiKey,
     String? openAiKey,
     String? groqKey,
+    String? customKey,
+    String? customBaseUrl,
+    String? customModel,
   }) async {
     byokEnabled = enabled;
     activeAiProvider = provider;
     if (geminiKey != null) geminiApiKey = geminiKey.trim();
     if (openAiKey != null) openAiApiKey = openAiKey.trim();
     if (groqKey != null) groqApiKey = groqKey.trim();
+    if (customKey != null) customApiKey = customKey.trim();
+    if (customBaseUrl != null) this.customBaseUrl = customBaseUrl.trim();
+    if (customModel != null) this.customModel = customModel.trim();
 
     await aiService.storage.setByokEnabled(enabled);
     await aiService.storage.setActiveProvider(provider);
     if (geminiKey != null) await aiService.storage.saveGeminiKey(geminiApiKey);
     if (openAiKey != null) await aiService.storage.saveOpenAiKey(openAiApiKey);
     if (groqKey != null) await aiService.storage.saveGroqKey(groqApiKey);
+    if (customKey != null) await aiService.storage.saveCustomKey(customApiKey);
+    if (customBaseUrl != null) {
+      await aiService.storage.saveCustomBaseUrl(this.customBaseUrl);
+    }
+    if (customModel != null) {
+      await aiService.storage.saveCustomModel(this.customModel);
+    }
 
     notifyListeners();
   }
@@ -95,9 +114,10 @@ class AppState extends ChangeNotifier {
   /// Tes koneksi API key langsung ke provider (PRD-SPRINT-06 §3.4).
   Future<ConnectionTestResult> testAiConnection(
     AiProviderType provider,
-    String apiKey,
-  ) =>
-      aiService.testConnection(provider, apiKey);
+    String apiKey, {
+    String? baseUrl,
+  }) =>
+      aiService.testConnection(provider, apiKey, baseUrl: baseUrl);
   /// Dipanggil sekali saat app start; null jika belum pernah login.
   Future<void> restoreSession() async {
     final prefs = await SharedPreferences.getInstance();
