@@ -40,6 +40,10 @@ class VideoProbe {
   final String codec;
   final bool hasAudio;
 
+  /// Nama codec stream audio (mis. 'aac', 'mp3') — null jika tidak ada audio
+  /// atau belum di-probe. Dipakai untuk mengisi AssetItem.audioFormat (S10).
+  final String? audioCodec;
+
   const VideoProbe({
     required this.durationSec,
     required this.width,
@@ -47,6 +51,7 @@ class VideoProbe {
     required this.fps,
     required this.codec,
     required this.hasAudio,
+    this.audioCodec,
   });
 
   String get resolution => '$width×$height';
