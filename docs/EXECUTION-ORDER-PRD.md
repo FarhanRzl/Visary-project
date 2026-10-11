@@ -67,6 +67,7 @@ Catatan: S05 bernomar lebih kecil dari S06, tapi **S06 harus jalan duluan** kare
 | **S07** UI Fidelity | ⏸️ Belum | — |
 | **S11** Speech Services | ✅ Phase 1 done | PRD `PRD-SPRINT-11-SPEECH-SERVICES.md`. Phase 1: provider custom OpenAI-compatible (Tokonomix base URL) + `transcribe` (multipart verbose_json word-ts) + Transcript/WordToken model + `toSrt` + `VideoSignals.transcript` + `JobStage.asr` real + caption editor real words. TTS deferred (§9, awaiting approval). 103 test, analyze 0. Remaining: hook-scoring word enrichment, Gemini inline-audio, chunking. |
 | **S12** Transcript Export | ✅ Selesai | PRD `PRD-SPRINT-12-TRANSCRIPT-STUDIO.md`. Scope diramping: tombol export/download transcript (.srt + .txt) di Caption & Reframe screen. `Transcript.toTxt()` method baru. `_buildExportSection()` helper: empty state (transcript null → disabled + pesan), warning (words kosong → .SRT disabled), tombol .SRT + .TXT → file picker → simpan. Mekanisme transcript tidak diubah. 112 test pass (103 + 9 baru), analyze 0. |
+| **S13** Audio-Driven Reseq |  Draft | PRD `PRD-SPRINT-13-AUDIO-DRIVEN-RESEQUENCE.md`. Transcribe replacement audio (manual trigger di AudioPanel) → timpa transcript → word-boundary re-sequencing (cut video di pause/word boundary, cycle through shots). Depends S10+S11 (done). Estimasi 2–3 hari. |
 
 Catatan: S04 (23 → 73 test) kini mencakup alur export. S08 export nyata sudah tervalidasi via `renderClip` + `extractSegment`. Gate G1 (validasi Windows 11) **belum dijalankan** — tetap wajib sebelum Phase 2 AI.
 
