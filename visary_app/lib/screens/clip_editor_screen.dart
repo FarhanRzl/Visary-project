@@ -11,7 +11,6 @@ import '../theme/tokens.dart';
 import '../widgets/brutal.dart';
 import '../widgets/export_dialog.dart';
 import '../widgets/pro_timeline.dart';
-import '../widgets/timeline.dart';
 
 /// ClipEditorScreen — Pixel-perfect match for canvas `tMv8K` (04-clip-editor.png)
 class ClipEditorScreen extends StatefulWidget {
