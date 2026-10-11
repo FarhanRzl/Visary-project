@@ -23,6 +23,9 @@ class ProjectsTable extends Table {
   BoolColumn get hasAudio => boolean().named('has_audio')();
   IntColumn get createdAt => integer().named('created_at')();
   TextColumn get thumbnailPath => text().named('thumbnail_path').nullable()();
+  TextColumn get audioMode => text().named('audio_mode').nullable()();
+  TextColumn get activeAudioAssetId =>
+      text().named('active_audio_asset_id').nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -68,6 +71,8 @@ class AssetsTable extends Table {
   TextColumn get sourceFile => text().named('source_file')();
   RealColumn get startSec => real().named('start_sec')();
   RealColumn get endSec => real().named('end_sec')();
+  RealColumn get durationSec => real().named('duration_sec').nullable()();
+  TextColumn get audioFormat => text().named('audio_format').nullable()();
 
   /// PK komposit: id asset (a_s0, a_b0, ...) unik hanya dalam satu project.
   @override
@@ -90,13 +95,17 @@ class VisaryDatabase extends _$VisaryDatabase {
       VisaryDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   /// Foreign key constraint harus diaktifkan eksplisit di SQLite,
   /// kalau tidak cascading delete tidak jalan.
   ///
   /// v1→v2: PK clips & assets jadi komposit {id, project_id} supaya id clip
   /// (c0, c1, ...) dan asset (a_s0, ...) tidak bentrok antar-project.
+  ///
+  /// v2→v3: kolom audio — projects.audio_mode + active_audio_asset_id,
+  /// assets.duration_sec + audio_format (PRD-SPRINT-10). Aditif (ALTER ADD
+  /// COLUMN nullable), data lama tetap.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onUpgrade: (m, from, to) async {
@@ -107,6 +116,13 @@ class VisaryDatabase extends _$VisaryDatabase {
             await m.createTable(clipsTable);
             await m.deleteTable('assets');
             await m.createTable(assetsTable);
+          }
+          if (from < 3) {
+            await m.addColumn(projectsTable, projectsTable.audioMode);
+            await m.addColumn(
+                projectsTable, projectsTable.activeAudioAssetId);
+            await m.addColumn(assetsTable, assetsTable.durationSec);
+            await m.addColumn(assetsTable, assetsTable.audioFormat);
           }
         },
         beforeOpen: (details) async {

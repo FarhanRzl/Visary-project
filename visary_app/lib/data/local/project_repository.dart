@@ -41,6 +41,8 @@ class ProjectMapper {
       hasAudio: probe?.hasAudio ?? false,
       createdAt: p.createdAt.millisecondsSinceEpoch,
       thumbnailPath: Value(p.thumbnailPath),
+      audioMode: Value(p.audioMode.name),
+      activeAudioAssetId: Value(p.activeAudioAssetId),
     );
   }
 
@@ -67,6 +69,8 @@ class ProjectMapper {
         sourceFile: a.sourceFile,
         startSec: a.start,
         endSec: a.end,
+        durationSec: Value(a.durationSec),
+        audioFormat: Value(a.audioFormat),
       );
 
   static Clip clipFromRow(ClipRow r) => Clip(
@@ -94,6 +98,8 @@ class ProjectMapper {
         sourceFile: r.sourceFile,
         start: r.startSec,
         end: r.endSec,
+        durationSec: r.durationSec,
+        audioFormat: r.audioFormat,
       );
 
   /// Project yang dimuat dari DB selalu berstatus `done` — hanya project
@@ -121,7 +127,17 @@ class ProjectMapper {
         clips: clips,
         assets: assets,
         thumbnailPath: r.thumbnailPath,
+        audioMode: _audioModeFromName(r.audioMode),
+        activeAudioAssetId: r.activeAudioAssetId,
       );
+
+  static AudioMode _audioModeFromName(String? s) {
+    if (s == null) return AudioMode.original;
+    return AudioMode.values.firstWhere(
+      (m) => m.name == s,
+      orElse: () => AudioMode.original,
+    );
+  }
 }
 
 /// Repository project: satu-satunya pintu AppState ke SQLite.

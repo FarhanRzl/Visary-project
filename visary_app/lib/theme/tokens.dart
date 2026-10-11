@@ -10,6 +10,7 @@ class VC {
   static const pink = Color(0xFFFF6B9D);
   static const blue = Color(0xFF3A86FF);
   static const green = Color(0xFF06D6A0);
+  static const purple = Color(0xFF9B5DE5);
   static const muted = Color(0xFF8B8680);
   static const dark = Color(0xFF2B2B2B);
   /// Background area video player (canvas tMv8K: #181818).

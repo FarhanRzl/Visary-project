@@ -11,7 +11,7 @@ import '../theme/tokens.dart';
 import '../widgets/brutal.dart';
 import '../widgets/export_dialog.dart';
 import '../widgets/pro_timeline.dart';
-import '../widgets/timeline.dart';
+import '../widgets/audio_panel.dart';
 
 /// ClipEditorScreen — Pixel-perfect match for canvas `tMv8K` (04-clip-editor.png)
 class ClipEditorScreen extends StatefulWidget {
@@ -34,6 +34,8 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
   VideoPlayerController? _videoController;
   bool _isVideoInitialized = false;
   String? _videoError;
+  bool _isAudioProcessing = false;
+  AudioMode? _lastAppliedAudioMode;
 
   @override
   void initState() {
@@ -66,16 +68,18 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
       if (mounted) setState(() => _videoError = '$e');
     });
 
-    _videoController?.addListener(() {
-      if (mounted && _videoController != null) {
-        final pos = _videoController!.value.position.inMilliseconds / 1000.0;
-        if ((pos - _playheadSec).abs() > 0.5) {
-          setState(() {
-            _playheadSec = pos;
-          });
-        }
-      }
-    });
+    _videoController?.addListener(_onVideoUpdate);
+  }
+
+  /// Listener playhead: sinkron _playheadSec dengan posisi controller.
+  void _onVideoUpdate() {
+    if (!mounted || _videoController == null) return;
+    final pos = _videoController!.value.position.inMilliseconds / 1000.0;
+    if ((pos - _playheadSec).abs() > 0.5) {
+      setState(() {
+        _playheadSec = pos;
+      });
+    }
   }
 
   void _seekTo(double seconds) {
@@ -90,6 +94,88 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
       _videoController!.play();
     }
     setState(() {});
+  }
+
+  /// Ganti sumber VideoPlayerController ke [path] (file preview audio atau
+  /// source). Dipakai sync preview Approach 2 (PRD-SPRINT-10 §3.2).
+  Future<void> _switchControllerTo(String path, {double volume = 1}) async {
+    final old = _videoController;
+    old?.removeListener(_onVideoUpdate);
+    setState(() {
+      _isVideoInitialized = false;
+      _videoError = null;
+    });
+    await old?.dispose();
+
+    final controller = VideoPlayerController.file(File(path));
+    _videoController = controller;
+    controller.addListener(_onVideoUpdate);
+    try {
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      await controller.setVolume(volume);
+      controller.seekTo(Duration(milliseconds: (_playheadSec * 1000).round()));
+      setState(() => _isVideoInitialized = true);
+    } catch (e) {
+      debugPrint('Switch controller error: $e');
+      if (mounted) setState(() => _videoError = '$e');
+    }
+  }
+
+  /// Terapkan mode audio saat ini: swap controller ke file preview
+  /// (replacement) atau kembali ke source (original/muted).
+  /// Mute = source + volume 0; original = source + volume 1.
+  Future<void> _applyAudioMode() async {
+    final state = context.read<AppState>();
+    final project = state.byId(widget.projectId);
+    if (project == null) return;
+    final mode = project.audioMode;
+    if (mode == _lastAppliedAudioMode && _videoController != null) return;
+
+    setState(() => _isAudioProcessing = true);
+    try {
+      if (mode == AudioMode.replacement) {
+        final previewPath =
+            await state.buildPreviewWithAudio(widget.projectId);
+        if (previewPath != null && mounted) {
+          await _switchControllerTo(previewPath, volume: 1);
+        }
+      } else {
+        if (_lastAppliedAudioMode == AudioMode.replacement) {
+          // dari preview → kembali ke source file.
+          await _switchControllerTo(project.filePath,
+              volume: mode == AudioMode.muted ? 0 : 1);
+        } else {
+          // tetap di source, atur volume saja.
+          await _videoController?.setVolume(mode == AudioMode.muted ? 0 : 1);
+        }
+      }
+      _lastAppliedAudioMode = mode;
+    } catch (e) {
+      debugPrint('Apply audio mode error: $e');
+    } finally {
+      if (mounted) setState(() => _isAudioProcessing = false);
+    }
+  }
+
+  /// Buka panel kontrol audio (bottom sheet).
+  void _openAudioPanel(Project project) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: VC.bg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero,
+        side: BorderSide(color: VC.ink, width: 3),
+      ),
+      isScrollControlled: true,
+      builder: (_) => AudioPanel(
+        projectId: project.id,
+        onAudioChange: _applyAudioMode,
+      ),
+    );
   }
 
   void _selectClip(int index) {
@@ -205,6 +291,16 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
                     onTap: () => Navigator.of(context).pushNamed(
                         '/caption-reframe',
                         arguments: project.name),
+                  ),
+                  const SizedBox(width: 8),
+                  BButton(
+                    label: 'AUDIO',
+                    icon: Icons.graphic_eq,
+                    kind: project.audioMode != AudioMode.original
+                        ? BtnKind.yellow
+                        : BtnKind.outline,
+                    small: true,
+                    onTap: _isAudioProcessing ? null : () => _openAudioPanel(project),
                   ),
                   const SizedBox(width: 12),
                   // Cancel & Export buttons

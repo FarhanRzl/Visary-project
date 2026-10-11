@@ -96,6 +96,11 @@ class VideoService {
       orElse: () => <String, dynamic>{},
     );
     final hasAudio = streams.any((s) => s['codec_type'] == 'audio');
+    final audioStream = streams.firstWhere(
+      (s) => s['codec_type'] == 'audio',
+      orElse: () => <String, dynamic>{},
+    );
+    final audioCodec = (audioStream['codec_name'] as String?);
 
     // Durasi: format lebih andal, fallback ke stream video.
     var duration =
@@ -111,6 +116,7 @@ class VideoService {
       fps: _parseFps(video['r_frame_rate'] ?? video['avg_frame_rate']),
       codec: (video['codec_name'] as String?) ?? 'unknown',
       hasAudio: hasAudio,
+      audioCodec: audioCodec,
     );
   }
 
@@ -253,11 +259,24 @@ class VideoService {
     String preset = 'veryfast',
     void Function(double progress)? onProgress,
     String? burnInSubtitlePath,
+    AudioMode audioMode = AudioMode.original,
+    String? replacementAudioPath,
   }) async {
     if (parts.isEmpty) throw ArgumentError('parts tidak boleh kosong');
     if (!File(sourcePath).existsSync()) {
       throw FileSystemException('Sumber video tidak ditemukan', sourcePath);
     }
+    if (audioMode == AudioMode.replacement) {
+      if (replacementAudioPath == null || replacementAudioPath.isEmpty) {
+        throw ArgumentError(
+            'replacementAudioPath wajib saat audioMode == replacement');
+      }
+      if (!File(replacementAudioPath).existsSync()) {
+        throw FileSystemException(
+            'Audio pengganti tidak ditemukan', replacementAudioPath);
+      }
+    }
+    final useSourceAudio = hasAudio && audioMode == AudioMode.original;
 
     final (w, h) = format.size;
     final totalDur = parts.fold<double>(0, (a, p) => a + p.duration);
@@ -273,7 +292,7 @@ class VideoService {
       final e = p.end.toStringAsFixed(3);
       fc.write('[0:v]trim=start=$s:end=$e,setpts=PTS-STARTPTS[v$i];');
       vLabels.add('[v$i]');
-      if (hasAudio) {
+      if (useSourceAudio) {
         fc.write('[0:a]atrim=start=$s:end=$e,asetpts=PTS-STARTPTS,aresample=async=1000[a$i];');
         aLabels.add('[a$i]');
       }
@@ -281,7 +300,7 @@ class VideoService {
 
     // Concat (n=1 tetap valid, jadi tidak perlu cabang khusus)
     fc.write('${vLabels.join()}concat=n=${parts.length}:v=1:a=0[vcat];');
-    if (hasAudio) {
+    if (useSourceAudio) {
       fc.write('${aLabels.join()}concat=n=${parts.length}:v=0:a=1[aout];');
     }
 
@@ -316,10 +335,15 @@ class VideoService {
       '-progress', 'pipe:1',
       '-loglevel', 'error',
       '-i', sourcePath,
+      if (audioMode == AudioMode.replacement) ...['-i', replacementAudioPath!],
       '-filter_complex', fc.toString(),
       '-map', '[vout]',
-      if (hasAudio) ...['-map', '[aout]', '-c:a', 'aac', '-b:a', '160k'],
-      if (!hasAudio) '-an',
+      if (useSourceAudio) ...['-map', '[aout]', '-c:a', 'aac', '-b:a', '160k'],
+      if (audioMode == AudioMode.replacement) ...[
+        '-map', '1:a:0', '-c:a', 'aac', '-b:a', '160k', '-shortest',
+      ],
+      if (audioMode == AudioMode.muted ||
+          (audioMode == AudioMode.original && !hasAudio)) '-an',
       '-c:v', 'libx264',
       '-preset', preset,
       '-crf', '20',
@@ -406,6 +430,83 @@ class VideoService {
       throw FfmpegFailedException(
           'extract segment', res.exitCode, _tail(res.stderr.toString()));
     }
+    return outputPath;
+  }
+
+  // ───────────────────────── AUDIO (PRD-SPRINT-10) ──────────────────────
+
+  /// Ekstrak audio dari video sumber sebagai file terpisah (AAC).
+  /// Membungkus [extractSegment] audioOnly + probe hasil untuk durasi & format.
+  static Future<({String path, double durationSec, String format})>
+      extractAudio({
+    required String sourcePath,
+    required double start,
+    required double end,
+    required String outputPath,
+  }) async {
+    await extractSegment(
+      sourcePath: sourcePath,
+      start: start,
+      end: end,
+      outputPath: outputPath,
+      audioOnly: true,
+    );
+    final p = await probe(outputPath);
+    return (
+      path: outputPath,
+      durationSec: p.durationSec,
+      format: p.audioCodec ?? 'aac',
+    );
+  }
+
+  /// Mux video (tanpa audio asli) + audio pengganti → file preview untuk
+  /// editor (PRD-SPRINT-10 §3.2, Approach 2). Video di-copy (cepat), audio
+  /// di-encode aac. `-shortest` → output = min(durasi video, durasi audio)
+  /// (truncate-to-audio-length).
+  static Future<String> muxPreviewAudio({
+    required String videoPath,
+    required String audioPath,
+    required String outputPath,
+  }) async {
+    if (!File(videoPath).existsSync()) {
+      throw FileSystemException('Video tidak ditemukan', videoPath);
+    }
+    if (!File(audioPath).existsSync()) {
+      throw FileSystemException('Audio tidak ditemukan', audioPath);
+    }
+    await Directory(File(outputPath).parent.path).create(recursive: true);
+
+    // Truncate-to-audio-length: output = min(durasi video, durasi audio).
+    // `-shortest` tidak andal dengan stream copy, jadi hitung min lalu pakai `-t`.
+    final vProbe = await probe(videoPath);
+    final aProbe = await probe(audioPath);
+    final outDur = [vProbe.durationSec, aProbe.durationSec]
+        .reduce((a, b) => a < b ? a : b);
+    if (outDur <= 0) {
+      throw StateError('Durasi video/audio tidak valid untuk mux preview');
+    }
+
+    final args = <String>[
+      '-hide_banner', '-loglevel', 'error',
+      '-i', videoPath,
+      '-i', audioPath,
+      '-map', '0:v', '-map', '1:a:0',
+      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k',
+      '-t', outDur.toStringAsFixed(3),
+      '-y', outputPath,
+    ];
+
+    final ProcessResult res;
+    try {
+      res = await Process.run(ffmpegBin, args);
+    } on ProcessException {
+      throw FfmpegMissingException(ffmpegBin);
+    }
+    if (res.exitCode != 0) {
+      throw FfmpegFailedException(
+          'mux preview audio', res.exitCode, _tail(res.stderr.toString()));
+    }
+    debugPrint('[VideoService] preview audio di-mux: $outputPath');
     return outputPath;
   }
 

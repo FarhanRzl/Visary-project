@@ -67,6 +67,18 @@ class $ProjectsTableTable extends ProjectsTable
   late final GeneratedColumn<String> thumbnailPath = GeneratedColumn<String>(
       'thumbnail_path', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _audioModeMeta =
+      const VerificationMeta('audioMode');
+  @override
+  late final GeneratedColumn<String> audioMode = GeneratedColumn<String>(
+      'audio_mode', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _activeAudioAssetIdMeta =
+      const VerificationMeta('activeAudioAssetId');
+  @override
+  late final GeneratedColumn<String> activeAudioAssetId =
+      GeneratedColumn<String>('active_audio_asset_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -78,7 +90,9 @@ class $ProjectsTableTable extends ProjectsTable
         fps,
         hasAudio,
         createdAt,
-        thumbnailPath
+        thumbnailPath,
+        audioMode,
+        activeAudioAssetId
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -149,6 +163,16 @@ class $ProjectsTableTable extends ProjectsTable
           thumbnailPath.isAcceptableOrUnknown(
               data['thumbnail_path']!, _thumbnailPathMeta));
     }
+    if (data.containsKey('audio_mode')) {
+      context.handle(_audioModeMeta,
+          audioMode.isAcceptableOrUnknown(data['audio_mode']!, _audioModeMeta));
+    }
+    if (data.containsKey('active_audio_asset_id')) {
+      context.handle(
+          _activeAudioAssetIdMeta,
+          activeAudioAssetId.isAcceptableOrUnknown(
+              data['active_audio_asset_id']!, _activeAudioAssetIdMeta));
+    }
     return context;
   }
 
@@ -178,6 +202,10 @@ class $ProjectsTableTable extends ProjectsTable
           .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
       thumbnailPath: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}thumbnail_path']),
+      audioMode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}audio_mode']),
+      activeAudioAssetId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}active_audio_asset_id']),
     );
   }
 
@@ -198,6 +226,8 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
   final bool hasAudio;
   final int createdAt;
   final String? thumbnailPath;
+  final String? audioMode;
+  final String? activeAudioAssetId;
   const ProjectRow(
       {required this.id,
       required this.name,
@@ -208,7 +238,9 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
       required this.fps,
       required this.hasAudio,
       required this.createdAt,
-      this.thumbnailPath});
+      this.thumbnailPath,
+      this.audioMode,
+      this.activeAudioAssetId});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -223,6 +255,12 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
     map['created_at'] = Variable<int>(createdAt);
     if (!nullToAbsent || thumbnailPath != null) {
       map['thumbnail_path'] = Variable<String>(thumbnailPath);
+    }
+    if (!nullToAbsent || audioMode != null) {
+      map['audio_mode'] = Variable<String>(audioMode);
+    }
+    if (!nullToAbsent || activeAudioAssetId != null) {
+      map['active_audio_asset_id'] = Variable<String>(activeAudioAssetId);
     }
     return map;
   }
@@ -241,6 +279,12 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
       thumbnailPath: thumbnailPath == null && nullToAbsent
           ? const Value.absent()
           : Value(thumbnailPath),
+      audioMode: audioMode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(audioMode),
+      activeAudioAssetId: activeAudioAssetId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(activeAudioAssetId),
     );
   }
 
@@ -258,6 +302,9 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
       hasAudio: serializer.fromJson<bool>(json['hasAudio']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       thumbnailPath: serializer.fromJson<String?>(json['thumbnailPath']),
+      audioMode: serializer.fromJson<String?>(json['audioMode']),
+      activeAudioAssetId:
+          serializer.fromJson<String?>(json['activeAudioAssetId']),
     );
   }
   @override
@@ -274,6 +321,8 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
       'hasAudio': serializer.toJson<bool>(hasAudio),
       'createdAt': serializer.toJson<int>(createdAt),
       'thumbnailPath': serializer.toJson<String?>(thumbnailPath),
+      'audioMode': serializer.toJson<String?>(audioMode),
+      'activeAudioAssetId': serializer.toJson<String?>(activeAudioAssetId),
     };
   }
 
@@ -287,7 +336,9 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
           double? fps,
           bool? hasAudio,
           int? createdAt,
-          Value<String?> thumbnailPath = const Value.absent()}) =>
+          Value<String?> thumbnailPath = const Value.absent(),
+          Value<String?> audioMode = const Value.absent(),
+          Value<String?> activeAudioAssetId = const Value.absent()}) =>
       ProjectRow(
         id: id ?? this.id,
         name: name ?? this.name,
@@ -300,6 +351,10 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
         createdAt: createdAt ?? this.createdAt,
         thumbnailPath:
             thumbnailPath.present ? thumbnailPath.value : this.thumbnailPath,
+        audioMode: audioMode.present ? audioMode.value : this.audioMode,
+        activeAudioAssetId: activeAudioAssetId.present
+            ? activeAudioAssetId.value
+            : this.activeAudioAssetId,
       );
   ProjectRow copyWithCompanion(ProjectsTableCompanion data) {
     return ProjectRow(
@@ -315,6 +370,10 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
       thumbnailPath: data.thumbnailPath.present
           ? data.thumbnailPath.value
           : this.thumbnailPath,
+      audioMode: data.audioMode.present ? data.audioMode.value : this.audioMode,
+      activeAudioAssetId: data.activeAudioAssetId.present
+          ? data.activeAudioAssetId.value
+          : this.activeAudioAssetId,
     );
   }
 
@@ -330,14 +389,16 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
           ..write('fps: $fps, ')
           ..write('hasAudio: $hasAudio, ')
           ..write('createdAt: $createdAt, ')
-          ..write('thumbnailPath: $thumbnailPath')
+          ..write('thumbnailPath: $thumbnailPath, ')
+          ..write('audioMode: $audioMode, ')
+          ..write('activeAudioAssetId: $activeAudioAssetId')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, name, filePath, duration, width, height,
-      fps, hasAudio, createdAt, thumbnailPath);
+      fps, hasAudio, createdAt, thumbnailPath, audioMode, activeAudioAssetId);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -351,7 +412,9 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
           other.fps == this.fps &&
           other.hasAudio == this.hasAudio &&
           other.createdAt == this.createdAt &&
-          other.thumbnailPath == this.thumbnailPath);
+          other.thumbnailPath == this.thumbnailPath &&
+          other.audioMode == this.audioMode &&
+          other.activeAudioAssetId == this.activeAudioAssetId);
 }
 
 class ProjectsTableCompanion extends UpdateCompanion<ProjectRow> {
@@ -365,6 +428,8 @@ class ProjectsTableCompanion extends UpdateCompanion<ProjectRow> {
   final Value<bool> hasAudio;
   final Value<int> createdAt;
   final Value<String?> thumbnailPath;
+  final Value<String?> audioMode;
+  final Value<String?> activeAudioAssetId;
   final Value<int> rowid;
   const ProjectsTableCompanion({
     this.id = const Value.absent(),
@@ -377,6 +442,8 @@ class ProjectsTableCompanion extends UpdateCompanion<ProjectRow> {
     this.hasAudio = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.thumbnailPath = const Value.absent(),
+    this.audioMode = const Value.absent(),
+    this.activeAudioAssetId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ProjectsTableCompanion.insert({
@@ -390,6 +457,8 @@ class ProjectsTableCompanion extends UpdateCompanion<ProjectRow> {
     required bool hasAudio,
     required int createdAt,
     this.thumbnailPath = const Value.absent(),
+    this.audioMode = const Value.absent(),
+    this.activeAudioAssetId = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         name = Value(name),
@@ -411,6 +480,8 @@ class ProjectsTableCompanion extends UpdateCompanion<ProjectRow> {
     Expression<bool>? hasAudio,
     Expression<int>? createdAt,
     Expression<String>? thumbnailPath,
+    Expression<String>? audioMode,
+    Expression<String>? activeAudioAssetId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -424,6 +495,9 @@ class ProjectsTableCompanion extends UpdateCompanion<ProjectRow> {
       if (hasAudio != null) 'has_audio': hasAudio,
       if (createdAt != null) 'created_at': createdAt,
       if (thumbnailPath != null) 'thumbnail_path': thumbnailPath,
+      if (audioMode != null) 'audio_mode': audioMode,
+      if (activeAudioAssetId != null)
+        'active_audio_asset_id': activeAudioAssetId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -439,6 +513,8 @@ class ProjectsTableCompanion extends UpdateCompanion<ProjectRow> {
       Value<bool>? hasAudio,
       Value<int>? createdAt,
       Value<String?>? thumbnailPath,
+      Value<String?>? audioMode,
+      Value<String?>? activeAudioAssetId,
       Value<int>? rowid}) {
     return ProjectsTableCompanion(
       id: id ?? this.id,
@@ -451,6 +527,8 @@ class ProjectsTableCompanion extends UpdateCompanion<ProjectRow> {
       hasAudio: hasAudio ?? this.hasAudio,
       createdAt: createdAt ?? this.createdAt,
       thumbnailPath: thumbnailPath ?? this.thumbnailPath,
+      audioMode: audioMode ?? this.audioMode,
+      activeAudioAssetId: activeAudioAssetId ?? this.activeAudioAssetId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -488,6 +566,12 @@ class ProjectsTableCompanion extends UpdateCompanion<ProjectRow> {
     if (thumbnailPath.present) {
       map['thumbnail_path'] = Variable<String>(thumbnailPath.value);
     }
+    if (audioMode.present) {
+      map['audio_mode'] = Variable<String>(audioMode.value);
+    }
+    if (activeAudioAssetId.present) {
+      map['active_audio_asset_id'] = Variable<String>(activeAudioAssetId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -507,6 +591,8 @@ class ProjectsTableCompanion extends UpdateCompanion<ProjectRow> {
           ..write('hasAudio: $hasAudio, ')
           ..write('createdAt: $createdAt, ')
           ..write('thumbnailPath: $thumbnailPath, ')
+          ..write('audioMode: $audioMode, ')
+          ..write('activeAudioAssetId: $activeAudioAssetId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1077,9 +1163,30 @@ class $AssetsTableTable extends AssetsTable
   late final GeneratedColumn<double> endSec = GeneratedColumn<double>(
       'end_sec', aliasedName, false,
       type: DriftSqlType.double, requiredDuringInsert: true);
+  static const VerificationMeta _durationSecMeta =
+      const VerificationMeta('durationSec');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, projectId, type, title, sourceFile, startSec, endSec];
+  late final GeneratedColumn<double> durationSec = GeneratedColumn<double>(
+      'duration_sec', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _audioFormatMeta =
+      const VerificationMeta('audioFormat');
+  @override
+  late final GeneratedColumn<String> audioFormat = GeneratedColumn<String>(
+      'audio_format', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        projectId,
+        type,
+        title,
+        sourceFile,
+        startSec,
+        endSec,
+        durationSec,
+        audioFormat
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1133,6 +1240,18 @@ class $AssetsTableTable extends AssetsTable
     } else if (isInserting) {
       context.missing(_endSecMeta);
     }
+    if (data.containsKey('duration_sec')) {
+      context.handle(
+          _durationSecMeta,
+          durationSec.isAcceptableOrUnknown(
+              data['duration_sec']!, _durationSecMeta));
+    }
+    if (data.containsKey('audio_format')) {
+      context.handle(
+          _audioFormatMeta,
+          audioFormat.isAcceptableOrUnknown(
+              data['audio_format']!, _audioFormatMeta));
+    }
     return context;
   }
 
@@ -1156,6 +1275,10 @@ class $AssetsTableTable extends AssetsTable
           .read(DriftSqlType.double, data['${effectivePrefix}start_sec'])!,
       endSec: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}end_sec'])!,
+      durationSec: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}duration_sec']),
+      audioFormat: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}audio_format']),
     );
   }
 
@@ -1173,6 +1296,8 @@ class AssetRow extends DataClass implements Insertable<AssetRow> {
   final String sourceFile;
   final double startSec;
   final double endSec;
+  final double? durationSec;
+  final String? audioFormat;
   const AssetRow(
       {required this.id,
       required this.projectId,
@@ -1180,7 +1305,9 @@ class AssetRow extends DataClass implements Insertable<AssetRow> {
       required this.title,
       required this.sourceFile,
       required this.startSec,
-      required this.endSec});
+      required this.endSec,
+      this.durationSec,
+      this.audioFormat});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1191,6 +1318,12 @@ class AssetRow extends DataClass implements Insertable<AssetRow> {
     map['source_file'] = Variable<String>(sourceFile);
     map['start_sec'] = Variable<double>(startSec);
     map['end_sec'] = Variable<double>(endSec);
+    if (!nullToAbsent || durationSec != null) {
+      map['duration_sec'] = Variable<double>(durationSec);
+    }
+    if (!nullToAbsent || audioFormat != null) {
+      map['audio_format'] = Variable<String>(audioFormat);
+    }
     return map;
   }
 
@@ -1203,6 +1336,12 @@ class AssetRow extends DataClass implements Insertable<AssetRow> {
       sourceFile: Value(sourceFile),
       startSec: Value(startSec),
       endSec: Value(endSec),
+      durationSec: durationSec == null && nullToAbsent
+          ? const Value.absent()
+          : Value(durationSec),
+      audioFormat: audioFormat == null && nullToAbsent
+          ? const Value.absent()
+          : Value(audioFormat),
     );
   }
 
@@ -1217,6 +1356,8 @@ class AssetRow extends DataClass implements Insertable<AssetRow> {
       sourceFile: serializer.fromJson<String>(json['sourceFile']),
       startSec: serializer.fromJson<double>(json['startSec']),
       endSec: serializer.fromJson<double>(json['endSec']),
+      durationSec: serializer.fromJson<double?>(json['durationSec']),
+      audioFormat: serializer.fromJson<String?>(json['audioFormat']),
     );
   }
   @override
@@ -1230,6 +1371,8 @@ class AssetRow extends DataClass implements Insertable<AssetRow> {
       'sourceFile': serializer.toJson<String>(sourceFile),
       'startSec': serializer.toJson<double>(startSec),
       'endSec': serializer.toJson<double>(endSec),
+      'durationSec': serializer.toJson<double?>(durationSec),
+      'audioFormat': serializer.toJson<String?>(audioFormat),
     };
   }
 
@@ -1240,7 +1383,9 @@ class AssetRow extends DataClass implements Insertable<AssetRow> {
           String? title,
           String? sourceFile,
           double? startSec,
-          double? endSec}) =>
+          double? endSec,
+          Value<double?> durationSec = const Value.absent(),
+          Value<String?> audioFormat = const Value.absent()}) =>
       AssetRow(
         id: id ?? this.id,
         projectId: projectId ?? this.projectId,
@@ -1249,6 +1394,8 @@ class AssetRow extends DataClass implements Insertable<AssetRow> {
         sourceFile: sourceFile ?? this.sourceFile,
         startSec: startSec ?? this.startSec,
         endSec: endSec ?? this.endSec,
+        durationSec: durationSec.present ? durationSec.value : this.durationSec,
+        audioFormat: audioFormat.present ? audioFormat.value : this.audioFormat,
       );
   AssetRow copyWithCompanion(AssetsTableCompanion data) {
     return AssetRow(
@@ -1260,6 +1407,10 @@ class AssetRow extends DataClass implements Insertable<AssetRow> {
           data.sourceFile.present ? data.sourceFile.value : this.sourceFile,
       startSec: data.startSec.present ? data.startSec.value : this.startSec,
       endSec: data.endSec.present ? data.endSec.value : this.endSec,
+      durationSec:
+          data.durationSec.present ? data.durationSec.value : this.durationSec,
+      audioFormat:
+          data.audioFormat.present ? data.audioFormat.value : this.audioFormat,
     );
   }
 
@@ -1272,14 +1423,16 @@ class AssetRow extends DataClass implements Insertable<AssetRow> {
           ..write('title: $title, ')
           ..write('sourceFile: $sourceFile, ')
           ..write('startSec: $startSec, ')
-          ..write('endSec: $endSec')
+          ..write('endSec: $endSec, ')
+          ..write('durationSec: $durationSec, ')
+          ..write('audioFormat: $audioFormat')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, projectId, type, title, sourceFile, startSec, endSec);
+  int get hashCode => Object.hash(id, projectId, type, title, sourceFile,
+      startSec, endSec, durationSec, audioFormat);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1290,7 +1443,9 @@ class AssetRow extends DataClass implements Insertable<AssetRow> {
           other.title == this.title &&
           other.sourceFile == this.sourceFile &&
           other.startSec == this.startSec &&
-          other.endSec == this.endSec);
+          other.endSec == this.endSec &&
+          other.durationSec == this.durationSec &&
+          other.audioFormat == this.audioFormat);
 }
 
 class AssetsTableCompanion extends UpdateCompanion<AssetRow> {
@@ -1301,6 +1456,8 @@ class AssetsTableCompanion extends UpdateCompanion<AssetRow> {
   final Value<String> sourceFile;
   final Value<double> startSec;
   final Value<double> endSec;
+  final Value<double?> durationSec;
+  final Value<String?> audioFormat;
   final Value<int> rowid;
   const AssetsTableCompanion({
     this.id = const Value.absent(),
@@ -1310,6 +1467,8 @@ class AssetsTableCompanion extends UpdateCompanion<AssetRow> {
     this.sourceFile = const Value.absent(),
     this.startSec = const Value.absent(),
     this.endSec = const Value.absent(),
+    this.durationSec = const Value.absent(),
+    this.audioFormat = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   AssetsTableCompanion.insert({
@@ -1320,6 +1479,8 @@ class AssetsTableCompanion extends UpdateCompanion<AssetRow> {
     required String sourceFile,
     required double startSec,
     required double endSec,
+    this.durationSec = const Value.absent(),
+    this.audioFormat = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         projectId = Value(projectId),
@@ -1336,6 +1497,8 @@ class AssetsTableCompanion extends UpdateCompanion<AssetRow> {
     Expression<String>? sourceFile,
     Expression<double>? startSec,
     Expression<double>? endSec,
+    Expression<double>? durationSec,
+    Expression<String>? audioFormat,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1346,6 +1509,8 @@ class AssetsTableCompanion extends UpdateCompanion<AssetRow> {
       if (sourceFile != null) 'source_file': sourceFile,
       if (startSec != null) 'start_sec': startSec,
       if (endSec != null) 'end_sec': endSec,
+      if (durationSec != null) 'duration_sec': durationSec,
+      if (audioFormat != null) 'audio_format': audioFormat,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1358,6 +1523,8 @@ class AssetsTableCompanion extends UpdateCompanion<AssetRow> {
       Value<String>? sourceFile,
       Value<double>? startSec,
       Value<double>? endSec,
+      Value<double?>? durationSec,
+      Value<String?>? audioFormat,
       Value<int>? rowid}) {
     return AssetsTableCompanion(
       id: id ?? this.id,
@@ -1367,6 +1534,8 @@ class AssetsTableCompanion extends UpdateCompanion<AssetRow> {
       sourceFile: sourceFile ?? this.sourceFile,
       startSec: startSec ?? this.startSec,
       endSec: endSec ?? this.endSec,
+      durationSec: durationSec ?? this.durationSec,
+      audioFormat: audioFormat ?? this.audioFormat,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1395,6 +1564,12 @@ class AssetsTableCompanion extends UpdateCompanion<AssetRow> {
     if (endSec.present) {
       map['end_sec'] = Variable<double>(endSec.value);
     }
+    if (durationSec.present) {
+      map['duration_sec'] = Variable<double>(durationSec.value);
+    }
+    if (audioFormat.present) {
+      map['audio_format'] = Variable<String>(audioFormat.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1411,6 +1586,8 @@ class AssetsTableCompanion extends UpdateCompanion<AssetRow> {
           ..write('sourceFile: $sourceFile, ')
           ..write('startSec: $startSec, ')
           ..write('endSec: $endSec, ')
+          ..write('durationSec: $durationSec, ')
+          ..write('audioFormat: $audioFormat, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1462,6 +1639,8 @@ typedef $$ProjectsTableTableCreateCompanionBuilder = ProjectsTableCompanion
   required bool hasAudio,
   required int createdAt,
   Value<String?> thumbnailPath,
+  Value<String?> audioMode,
+  Value<String?> activeAudioAssetId,
   Value<int> rowid,
 });
 typedef $$ProjectsTableTableUpdateCompanionBuilder = ProjectsTableCompanion
@@ -1476,6 +1655,8 @@ typedef $$ProjectsTableTableUpdateCompanionBuilder = ProjectsTableCompanion
   Value<bool> hasAudio,
   Value<int> createdAt,
   Value<String?> thumbnailPath,
+  Value<String?> audioMode,
+  Value<String?> activeAudioAssetId,
   Value<int> rowid,
 });
 
@@ -1551,6 +1732,13 @@ class $$ProjectsTableTableFilterComposer
 
   ColumnFilters<String> get thumbnailPath => $composableBuilder(
       column: $table.thumbnailPath, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get audioMode => $composableBuilder(
+      column: $table.audioMode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get activeAudioAssetId => $composableBuilder(
+      column: $table.activeAudioAssetId,
+      builder: (column) => ColumnFilters(column));
 
   Expression<bool> clipsTableRefs(
       Expression<bool> Function($$ClipsTableTableFilterComposer f) f) {
@@ -1634,6 +1822,13 @@ class $$ProjectsTableTableOrderingComposer
   ColumnOrderings<String> get thumbnailPath => $composableBuilder(
       column: $table.thumbnailPath,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get audioMode => $composableBuilder(
+      column: $table.audioMode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get activeAudioAssetId => $composableBuilder(
+      column: $table.activeAudioAssetId,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$ProjectsTableTableAnnotationComposer
@@ -1674,6 +1869,12 @@ class $$ProjectsTableTableAnnotationComposer
 
   GeneratedColumn<String> get thumbnailPath => $composableBuilder(
       column: $table.thumbnailPath, builder: (column) => column);
+
+  GeneratedColumn<String> get audioMode =>
+      $composableBuilder(column: $table.audioMode, builder: (column) => column);
+
+  GeneratedColumn<String> get activeAudioAssetId => $composableBuilder(
+      column: $table.activeAudioAssetId, builder: (column) => column);
 
   Expression<T> clipsTableRefs<T extends Object>(
       Expression<T> Function($$ClipsTableTableAnnotationComposer a) f) {
@@ -1752,6 +1953,8 @@ class $$ProjectsTableTableTableManager extends RootTableManager<
             Value<bool> hasAudio = const Value.absent(),
             Value<int> createdAt = const Value.absent(),
             Value<String?> thumbnailPath = const Value.absent(),
+            Value<String?> audioMode = const Value.absent(),
+            Value<String?> activeAudioAssetId = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ProjectsTableCompanion(
@@ -1765,6 +1968,8 @@ class $$ProjectsTableTableTableManager extends RootTableManager<
             hasAudio: hasAudio,
             createdAt: createdAt,
             thumbnailPath: thumbnailPath,
+            audioMode: audioMode,
+            activeAudioAssetId: activeAudioAssetId,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -1778,6 +1983,8 @@ class $$ProjectsTableTableTableManager extends RootTableManager<
             required bool hasAudio,
             required int createdAt,
             Value<String?> thumbnailPath = const Value.absent(),
+            Value<String?> audioMode = const Value.absent(),
+            Value<String?> activeAudioAssetId = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ProjectsTableCompanion.insert(
@@ -1791,6 +1998,8 @@ class $$ProjectsTableTableTableManager extends RootTableManager<
             hasAudio: hasAudio,
             createdAt: createdAt,
             thumbnailPath: thumbnailPath,
+            audioMode: audioMode,
+            activeAudioAssetId: activeAudioAssetId,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -2212,6 +2421,8 @@ typedef $$AssetsTableTableCreateCompanionBuilder = AssetsTableCompanion
   required String sourceFile,
   required double startSec,
   required double endSec,
+  Value<double?> durationSec,
+  Value<String?> audioFormat,
   Value<int> rowid,
 });
 typedef $$AssetsTableTableUpdateCompanionBuilder = AssetsTableCompanion
@@ -2223,6 +2434,8 @@ typedef $$AssetsTableTableUpdateCompanionBuilder = AssetsTableCompanion
   Value<String> sourceFile,
   Value<double> startSec,
   Value<double> endSec,
+  Value<double?> durationSec,
+  Value<String?> audioFormat,
   Value<int> rowid,
 });
 
@@ -2272,6 +2485,12 @@ class $$AssetsTableTableFilterComposer
   ColumnFilters<double> get endSec => $composableBuilder(
       column: $table.endSec, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<double> get durationSec => $composableBuilder(
+      column: $table.durationSec, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get audioFormat => $composableBuilder(
+      column: $table.audioFormat, builder: (column) => ColumnFilters(column));
+
   $$ProjectsTableTableFilterComposer get projectId {
     final $$ProjectsTableTableFilterComposer composer = $composerBuilder(
         composer: this,
@@ -2320,6 +2539,12 @@ class $$AssetsTableTableOrderingComposer
   ColumnOrderings<double> get endSec => $composableBuilder(
       column: $table.endSec, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<double> get durationSec => $composableBuilder(
+      column: $table.durationSec, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get audioFormat => $composableBuilder(
+      column: $table.audioFormat, builder: (column) => ColumnOrderings(column));
+
   $$ProjectsTableTableOrderingComposer get projectId {
     final $$ProjectsTableTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -2367,6 +2592,12 @@ class $$AssetsTableTableAnnotationComposer
 
   GeneratedColumn<double> get endSec =>
       $composableBuilder(column: $table.endSec, builder: (column) => column);
+
+  GeneratedColumn<double> get durationSec => $composableBuilder(
+      column: $table.durationSec, builder: (column) => column);
+
+  GeneratedColumn<String> get audioFormat => $composableBuilder(
+      column: $table.audioFormat, builder: (column) => column);
 
   $$ProjectsTableTableAnnotationComposer get projectId {
     final $$ProjectsTableTableAnnotationComposer composer = $composerBuilder(
@@ -2419,6 +2650,8 @@ class $$AssetsTableTableTableManager extends RootTableManager<
             Value<String> sourceFile = const Value.absent(),
             Value<double> startSec = const Value.absent(),
             Value<double> endSec = const Value.absent(),
+            Value<double?> durationSec = const Value.absent(),
+            Value<String?> audioFormat = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               AssetsTableCompanion(
@@ -2429,6 +2662,8 @@ class $$AssetsTableTableTableManager extends RootTableManager<
             sourceFile: sourceFile,
             startSec: startSec,
             endSec: endSec,
+            durationSec: durationSec,
+            audioFormat: audioFormat,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -2439,6 +2674,8 @@ class $$AssetsTableTableTableManager extends RootTableManager<
             required String sourceFile,
             required double startSec,
             required double endSec,
+            Value<double?> durationSec = const Value.absent(),
+            Value<String?> audioFormat = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               AssetsTableCompanion.insert(
@@ -2449,6 +2686,8 @@ class $$AssetsTableTableTableManager extends RootTableManager<
             sourceFile: sourceFile,
             startSec: startSec,
             endSec: endSec,
+            durationSec: durationSec,
+            audioFormat: audioFormat,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

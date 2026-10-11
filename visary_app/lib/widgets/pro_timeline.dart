@@ -386,7 +386,7 @@ class _ProTimelineState extends State<ProTimeline> {
         final w = constraints.maxWidth;
         final viewDur = _viewportDuration;
         // Marker interval adaptif: 6-12 markers
-        final targetMarkers = 8;
+        const targetMarkers = 8;
         final rawStep = viewDur / targetMarkers;
         final niceSteps = [1, 2, 5, 10, 15, 30, 60, 120, 300];
         final matching = niceSteps.where((s) => s >= rawStep).toList();
@@ -476,7 +476,7 @@ class _ProTimelineState extends State<ProTimeline> {
 
   Widget _buildVideoTrack(double w, double h) {
     if (!_thumbsGenerated) {
-      return Center(child: SizedBox(
+      return const Center(child: SizedBox(
         width: 16, height: 16,
         child: CircularProgressIndicator(strokeWidth: 2, color: VC.muted),
       ));
