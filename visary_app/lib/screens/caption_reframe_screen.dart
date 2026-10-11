@@ -442,6 +442,12 @@ class _CaptionReframeScreenState extends State<CaptionReframeScreen> {
 
                       const Divider(color: VC.ink, thickness: 2),
 
+                      // Export Transcript — PRD-SPRINT-12
+                      Text('EXPORT TRANSCRIPT', style: VT.mono(11)),
+                      ..._buildExportSection(),
+
+                      const Divider(color: VC.ink, thickness: 2),
+
                       // Interactive Transcript Editor
                       Text('KOREKSI TRANSKRIP', style: VT.mono(11)),
                       Text('Klik kata untuk koreksi hasil ASR Whisper:',
@@ -473,12 +479,6 @@ class _CaptionReframeScreenState extends State<CaptionReframeScreen> {
                           }).toList(),
                         ),
                       ),
-
-                      const Divider(color: VC.ink, thickness: 2),
-
-                      // Export Transcript — PRD-SPRINT-12
-                      Text('EXPORT TRANSCRIPT', style: VT.mono(11)),
-                      ..._buildExportSection(),
                     ], 16),
                   ),
                 ),
