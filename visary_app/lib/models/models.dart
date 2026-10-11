@@ -168,6 +168,26 @@ class Clip {
   });
 
   double get duration => parts.fold(0.0, (a, p) => a + p.duration);
+
+  /// Salin clip dengan field yang diubah (PRD-SPRINT-13).
+  Clip copyWith({
+    List<ClipPart>? parts,
+    ClipType? type,
+    bool? selected9x16,
+    bool? selected1x1,
+  }) =>
+      Clip(
+        id: id,
+        title: title,
+        parts: parts ?? this.parts,
+        hook: hook,
+        score: score,
+        reason: reason,
+        type: type ?? this.type,
+        selected9x16: selected9x16 ?? this.selected9x16,
+        selected1x1: selected1x1 ?? this.selected1x1,
+        brollRecommendations: brollRecommendations,
+      );
 }
 
 class HookCandidate {

@@ -26,6 +26,7 @@ class AudioPanel extends StatefulWidget {
 
 class _AudioPanelState extends State<AudioPanel> {
   bool _busy = false;
+  bool _isTranscribing = false;
 
   Future<void> _upload() async {
     final state = context.read<AppState>();
@@ -91,6 +92,31 @@ class _AudioPanelState extends State<AudioPanel> {
   Future<void> _useAsset(AssetItem a) async {
     context.read<AppState>().setActiveAudioAsset(widget.projectId, a.id);
     await widget.onAudioChange();
+  }
+
+  /// Transkripsi audio pengganti → re-sequence clips. PRD-SPRINT-13.
+  Future<void> _transcribeAudio() async {
+    setState(() => _isTranscribing = true);
+    try {
+      final state = context.read<AppState>();
+      await state.transcribeReplacementAudio(widget.projectId);
+      if (mounted) {
+        final t = state.signalsOf(widget.projectId)?.transcript;
+        final wordCount = t?.words.length ?? 0;
+        showBrutalSnack(context,
+            'Transkrip audio pengganti: $wordCount kata. Clips di-resequence.');
+      }
+    } on StateError catch (e) {
+      if (mounted) {
+        showBrutalSnack(context, e.message, color: VC.pink);
+      }
+    } catch (e) {
+      if (mounted) {
+        showBrutalSnack(context, 'Transkripsi gagal: $e', color: VC.pink);
+      }
+    } finally {
+      if (mounted) setState(() => _isTranscribing = false);
+    }
   }
 
   @override
@@ -181,6 +207,30 @@ class _AudioPanelState extends State<AudioPanel> {
             else
               ...audioAssets.map(
                   (a) => _audioTile(a, mode, project.activeAudioAssetId)),
+
+            // Transcribe Audio Pengganti — PRD-SPRINT-13
+            if (mode == AudioMode.replacement) ...[
+              const SizedBox(height: 16),
+              const Divider(color: VC.ink, thickness: 2),
+              const SizedBox(height: 12),
+              Text('TRANSKRIPSI AUDIO PENGGANTI',
+                  style: VT.mono(12, color: VC.muted)),
+              const SizedBox(height: 8),
+              if (_isTranscribing)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Center(
+                      child: CircularProgressIndicator(color: VC.purple)),
+                )
+              else
+                BButton(
+                  label: 'TRANSCRIBE AUDIO',
+                  icon: Icons.mic,
+                  kind: BtnKind.dark,
+                  expand: true,
+                  onTap: _transcribeAudio,
+                ),
+            ],
           ],
         ),
       );

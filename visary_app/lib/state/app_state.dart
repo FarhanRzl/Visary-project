@@ -11,6 +11,7 @@ import '../models/models.dart';
 import '../services/ai_provider_service.dart';
 import '../services/ai_service.dart';
 import '../services/local_analyzer.dart';
+import '../services/resequence_service.dart';
 import '../services/video_service.dart' show VideoService, FfmpegMissingException, BrollOverlay;
 
 /// State global aplikasi.
@@ -562,6 +563,48 @@ class AppState extends ChangeNotifier {
     final dot = fileName.lastIndexOf('.');
     if (dot < 0 || dot == fileName.length - 1) return 'aac';
     return fileName.substring(dot + 1).toLowerCase();
+  }
+
+  // ─────────── AUDIO-DRIVEN RE-SEQUENCING (PRD-SPRINT-13) ──────────────
+
+  static const _resequencer = Resequencer();
+
+  /// Transkripsi audio pengganti → timpa transcript → re-sequence clips.
+  /// PRD-SPRINT-13 §2.1.
+  Future<void> transcribeReplacementAudio(String projectId) async {
+    final p = byId(projectId);
+    if (p == null) throw StateError('Project tidak ditemukan');
+    final audio = p.activeAudioAsset;
+    if (audio == null) throw StateError('Tidak ada audio pengganti aktif');
+
+    final signals = _signals[projectId];
+    if (signals == null) throw StateError('Signals belum di-scan');
+
+    final t = await aiService.transcribe(audioFilePath: audio.sourceFile);
+    signals.transcript = t;
+    debugPrint('[S13] transkrip audio pengganti: ${t.words.length} words, '
+        'provider=${t.provider}');
+
+    resequenceClips(projectId);
+    notifyListeners();
+  }
+
+  /// Re-sequence clip parts berdasarkan word boundary dari transcript.
+  /// PRD-SPRINT-13 §2.2.
+  void resequenceClips(String projectId) {
+    final p = byId(projectId);
+    if (p == null) return;
+    final signals = _signals[projectId];
+    if (signals == null) return;
+    final t = signals.transcript;
+    if (t == null || t.words.isEmpty) return;
+
+    final newClips = _resequencer.resequence(
+      clips: p.clips,
+      signals: signals,
+      videoDuration: p.probe?.durationSec ?? 0,
+    );
+    _put(p.copyWith(clips: newClips));
   }
 
   // ─────────────────── B-ROLL RECOMMENDATION (PRD-SPRINT-05) ──────────────
