@@ -75,7 +75,7 @@ class VisaryApp extends StatelessWidget {
             );
           case '/caption-reframe':
             return MaterialPageRoute(
-              builder: (_) => CaptionReframeScreen(clipTitle: id ?? ''),
+              builder: (_) => CaptionReframeScreen(projectId: id ?? ''),
             );
         }
         return null;

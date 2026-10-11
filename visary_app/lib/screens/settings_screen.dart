@@ -27,6 +27,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _geminiKeyCtrl;
   late final TextEditingController _openaiKeyCtrl;
   late final TextEditingController _groqKeyCtrl;
+  late final TextEditingController _customKeyCtrl;
+  late final TextEditingController _customBaseUrlCtrl;
+  late final TextEditingController _customModelCtrl;
 
   @override
   void initState() {
@@ -35,6 +38,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _geminiKeyCtrl = TextEditingController(text: state.geminiApiKey);
     _openaiKeyCtrl = TextEditingController(text: state.openAiApiKey);
     _groqKeyCtrl = TextEditingController(text: state.groqApiKey);
+    _customKeyCtrl = TextEditingController(text: state.customApiKey);
+    _customBaseUrlCtrl = TextEditingController(text: state.customBaseUrl);
+    _customModelCtrl = TextEditingController(text: state.customModel);
   }
 
   @override
@@ -42,6 +48,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _geminiKeyCtrl.dispose();
     _openaiKeyCtrl.dispose();
     _groqKeyCtrl.dispose();
+    _customKeyCtrl.dispose();
+    _customBaseUrlCtrl.dispose();
+    _customModelCtrl.dispose();
     super.dispose();
   }
 
@@ -228,6 +237,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'Masukkan API key pribadi Anda untuk membuka fitur AI tanpa batasan kuota internal Visary.',
             style: VT.body(13, color: VC.muted),
           ),
+          const SizedBox(height: 16),
+          BBox(
+            shadow: 2,
+            padding: const EdgeInsets.all(16),
+            color: VC.paper,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.help_outline, size: 16, color: VC.purple),
+                    const SizedBox(width: 8),
+                    Text('API KEY YANG BISA DIPAKAI', style: VT.display(14)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                    '• Gemini (AIza...) — LLM/B-roll sekarang; ASR text-only (segera via S11).',
+                    style: VT.mono(11, color: VC.ink)),
+                Text(
+                    '• OpenAI (sk-proj...) — LLM/B-roll sekarang; ASR whisper-1 + TTS tts-1 (segera/deferred).',
+                    style: VT.mono(11, color: VC.ink)),
+                Text(
+                    '• Groq (gsk_...) — LLM/B-roll sekarang; ASR whisper-large-v3 (segera).',
+                    style: VT.mono(11, color: VC.ink)),
+                Text(
+                    '• Custom / Tokonomix (tok_live...) — segera via S11: ASR + LLM via base URL konfigurabel.',
+                    style: VT.mono(11, color: VC.ink)),
+                Text(
+                    '• Antigravity Pro — chat/vision LLM only, tidak support speech (ASR/TTS).',
+                    style: VT.mono(11, color: VC.ink)),
+                const SizedBox(height: 10),
+                Text(
+                  'Sekarang key dipakai untuk fitur AI B-roll. ASR (transkrip caption) segera via S11. TTS (voiceover) menunggu persetujuan. Tanpa key: app tetap jalan mode lokal (shots/energi/OCR).',
+                  style: VT.body(11, color: VC.muted),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 24),
 
           // Provider Selector
@@ -305,6 +353,92 @@ class _SettingsScreenState extends State<SettingsScreen> {
             hint: 'gsk_...',
           ),
 
+          const SizedBox(height: 20),
+
+          // 4. Custom OpenAI-Compatible (Tokonomix, OpenRouter, dll.)
+          BBox(
+            shadow: 4,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: VC.purple,
+                        border: Border.all(color: VC.ink, width: 1.5),
+                      ),
+                      child: Text('CUSTOM / OPENAI-COMPATIBLE',
+                          style: VT.mono(11, weight: FontWeight.w700, color: Colors.white)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text('Tokonomix, OpenRouter, dll. — base URL konfigurabel (PRD-SPRINT-11)',
+                          style: VT.body(12, color: VC.muted),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text('BASE URL', style: VT.mono(10)),
+                const SizedBox(height: 6),
+                BInput(
+                  controller: _customBaseUrlCtrl,
+                  hint: 'https://tokonomix.ai/api/v1',
+                ),
+                const SizedBox(height: 12),
+                Text('API KEY', style: VT.mono(10)),
+                const SizedBox(height: 6),
+                BInput(
+                  controller: _customKeyCtrl,
+                  hint: 'tok_live_...',
+                  obscure: true,
+                ),
+                const SizedBox(height: 12),
+                Text('MODEL', style: VT.mono(10)),
+                const SizedBox(height: 6),
+                BInput(
+                  controller: _customModelCtrl,
+                  hint: 'gpt-4o-mini',
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text('Tersimpan terenkripsi lokal.',
+                          style: VT.mono(10, color: VC.muted)),
+                    ),
+                    const SizedBox(width: 8),
+                    BButton(
+                      label: 'TES KONEKSI',
+                      kind: BtnKind.outline,
+                      small: true,
+                      onTap: () async {
+                        final key = _customKeyCtrl.text.trim();
+                        final base = _customBaseUrlCtrl.text.trim();
+                        if (key.isEmpty || base.isEmpty) {
+                          showBrutalSnack(context, 'Base URL & Key wajib diisi');
+                          return;
+                        }
+                        showBrutalSnack(context, 'Menguji koneksi ke $base...');
+                        final res = await state.testAiConnection(
+                          AiProviderType.custom,
+                          key,
+                          baseUrl: base,
+                        );
+                        if (!mounted) return;
+                        showBrutalSnack(context, res.message);
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
           const SizedBox(height: 24),
 
           BButton(
@@ -318,6 +452,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 geminiKey: _geminiKeyCtrl.text,
                 openAiKey: _openaiKeyCtrl.text,
                 groqKey: _groqKeyCtrl.text,
+                customKey: _customKeyCtrl.text,
+                customBaseUrl: _customBaseUrlCtrl.text,
+                customModel: _customModelCtrl.text,
               );
               if (mounted) showBrutalSnack(context, 'Konfigurasi API Key berhasil disimpan!');
             },

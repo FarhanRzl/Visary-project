@@ -268,9 +268,13 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
                   ),
                   const Spacer(),
                   // Filename in center
-                  Text(
-                    fileName,
-                    style: VT.mono(13, color: VC.muted),
+                  Flexible(
+                    child: Text(
+                      fileName,
+                      style: VT.mono(13, color: VC.muted),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
                   ),
                   const Spacer(),
                   // Navigasi Hook Finder & Caption Reframe
@@ -290,7 +294,7 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
                     small: true,
                     onTap: () => Navigator.of(context).pushNamed(
                         '/caption-reframe',
-                        arguments: project.name),
+                        arguments: project.id),
                   ),
                   const SizedBox(width: 8),
                   BButton(
@@ -424,7 +428,7 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
                                 child: Clickable(
                                   onTap: () => Navigator.of(context).pushNamed(
                                       '/caption-reframe',
-                                      arguments: project.name),
+                                      arguments: project.id),
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 14, vertical: 8),

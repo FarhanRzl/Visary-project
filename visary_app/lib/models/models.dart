@@ -262,6 +262,58 @@ class AssetItem {
   bool get isAudio => type == AssetType.audio;
 }
 
+/// Token kata dengan timestamp word-level dari ASR (PRD-SPRINT-11 §2.4).
+class WordToken {
+  final String word;
+  final double start; // detik
+  final double end; // detik
+  const WordToken({required this.word, required this.start, required this.end});
+}
+
+/// Hasil transkripsi audio (PRD-SPRINT-11). [words] berisi word-level
+/// timestamp bila provider mendukung (OpenAI/Groq/custom verbose_json);
+/// kosong bila text-only (Gemini) atau ASR gagal/belum aktif.
+class Transcript {
+  final String fullText;
+  final List<WordToken> words;
+  final String? language;
+  final String provider; // nama provider (mis. 'custom', 'openai', 'server')
+
+  const Transcript({
+    required this.fullText,
+    required this.words,
+    this.language,
+    required this.provider,
+  });
+
+  bool get isEmpty => fullText.isEmpty && words.isEmpty;
+
+  /// Format SRT (index, timecode, text) dari word timestamp.
+  String toSrt() {
+    if (words.isEmpty) return '';
+    final buf = StringBuffer();
+    for (var i = 0; i < words.length; i++) {
+      final w = words[i];
+      buf.writeln(i + 1);
+      buf.writeln('${_srtTime(w.start)} --> ${_srtTime(w.end)}');
+      buf.writeln(w.word);
+      buf.writeln();
+    }
+    return buf.toString();
+  }
+
+  static String _srtTime(double sec) {
+    final h = (sec ~/ 3600).toInt();
+    final m = ((sec % 3600) ~/ 60).toInt();
+    final s = (sec % 60).floor();
+    final ms = ((sec - sec.floor()) * 1000).round();
+    return '${h.toString().padLeft(2, '0')}:'
+        '${m.toString().padLeft(2, '0')}:'
+        '${s.toString().padLeft(2, '0')},'
+        '${ms.toString().padLeft(3, '0')}';
+  }
+}
+
 /// Representasi quota akun — PRD §4.9.
 class QuotaInfo {
   final int usedMinutes;

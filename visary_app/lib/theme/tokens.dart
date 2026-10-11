@@ -27,18 +27,50 @@ class VB {
 }
 
 class VT {
+  /// Fallback CJK (Mandarin/dll) — glyph yang tidak ada di font utama
+  /// (archivoBlack/spaceGrotesk/jetBrainsMono = Latin-only) diambil dari
+  /// Noto Sans SC yang di-bundle (PRD-S11: dukung transkrip Mandarin).
+  static const cjkFallback = ['NotoSansSC'];
+
   static TextStyle display(double size, {Color color = VC.ink}) =>
-      GoogleFonts.archivoBlack(fontSize: size, color: color, height: 1.15);
+      GoogleFonts.archivoBlack(fontSize: size, color: color, height: 1.15)
+          .copyWith(fontFamilyFallback: cjkFallback);
 
   static TextStyle body(double size,
           {Color color = VC.ink, FontWeight weight = FontWeight.w400}) =>
       GoogleFonts.spaceGrotesk(
-          fontSize: size, color: color, fontWeight: weight, height: 1.35);
+              fontSize: size, color: color, fontWeight: weight, height: 1.35)
+          .copyWith(fontFamilyFallback: cjkFallback);
 
   static TextStyle mono(double size,
           {Color color = VC.ink, FontWeight weight = FontWeight.w700}) =>
       GoogleFonts.jetBrainsMono(
-          fontSize: size, color: color, fontWeight: weight, height: 1.3);
+              fontSize: size, color: color, fontWeight: weight, height: 1.3)
+          .copyWith(fontFamilyFallback: cjkFallback);
+}
+
+/// Tambah fallback CJK (Noto Sans SC) ke seluruh style textTheme supaya
+/// karakter Mandarin/Chinese render (font google utama Latin-only).
+TextTheme _withCjkFallback(TextTheme t) {
+  TextStyle f(TextStyle? s) =>
+      (s ?? const TextStyle()).copyWith(fontFamilyFallback: VT.cjkFallback);
+  return t.copyWith(
+    displayLarge: f(t.displayLarge),
+    displayMedium: f(t.displayMedium),
+    displaySmall: f(t.displaySmall),
+    headlineLarge: f(t.headlineLarge),
+    headlineMedium: f(t.headlineMedium),
+    headlineSmall: f(t.headlineSmall),
+    titleLarge: f(t.titleLarge),
+    titleMedium: f(t.titleMedium),
+    titleSmall: f(t.titleSmall),
+    bodyLarge: f(t.bodyLarge),
+    bodyMedium: f(t.bodyMedium),
+    bodySmall: f(t.bodySmall),
+    labelLarge: f(t.labelLarge),
+    labelMedium: f(t.labelMedium),
+    labelSmall: f(t.labelSmall),
+  );
 }
 
 ThemeData buildTheme() {
@@ -54,7 +86,8 @@ ThemeData buildTheme() {
     highlightColor: Colors.transparent,
   );
   return base.copyWith(
-    textTheme: GoogleFonts.spaceGroteskTextTheme(base.textTheme)
+    textTheme: _withCjkFallback(
+            GoogleFonts.spaceGroteskTextTheme(base.textTheme))
         .apply(bodyColor: VC.ink, displayColor: VC.ink),
     tooltipTheme: TooltipThemeData(
       decoration: BoxDecoration(

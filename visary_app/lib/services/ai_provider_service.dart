@@ -3,12 +3,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/models.dart';
+
 /// Tipe provider AI yang didukung Visary (PRD-SPRINT-06 §2.2).
 enum AiProviderType {
   server('Server Visary (Default Kuota)'),
   gemini('Google Gemini API'),
   openai('OpenAI API'),
-  groq('Groq Cloud API');
+  groq('Groq Cloud API'),
+  custom('OpenAI-Compatible (custom base URL)');
 
   const AiProviderType(this.displayName);
   final String displayName;
@@ -61,6 +64,18 @@ class SecureKeyStorage {
   Future<void> saveGroqKey(String key) => write(keyGroq, key);
   Future<String?> getGroqKey() => read(keyGroq);
 
+  // Custom OpenAI-compatible provider (e.g. Tokonomix) — PRD-SPRINT-11 §2.1.
+  static const keyCustomApi = 'byok_custom_api_key';
+  static const keyCustomBaseUrl = 'byok_custom_base_url';
+  static const keyCustomModel = 'byok_custom_model';
+
+  Future<void> saveCustomKey(String key) => write(keyCustomApi, key);
+  Future<String?> getCustomKey() => read(keyCustomApi);
+  Future<void> saveCustomBaseUrl(String url) => write(keyCustomBaseUrl, url);
+  Future<String?> getCustomBaseUrl() => read(keyCustomBaseUrl);
+  Future<void> saveCustomModel(String model) => write(keyCustomModel, model);
+  Future<String?> getCustomModel() => read(keyCustomModel);
+
   Future<void> setByokEnabled(bool enabled) => write(keyByokEnabled, enabled.toString());
   Future<bool> getByokEnabled() async {
     final v = await read(keyByokEnabled);
@@ -94,8 +109,9 @@ class AiProviderService {
   /// Menguji validitas koneksi API key langsung ke endpoint provider.
   Future<ConnectionTestResult> testConnection(
     AiProviderType provider,
-    String apiKey,
-  ) async {
+    String apiKey, {
+    String? baseUrl,
+  }) async {
     final key = apiKey.trim();
     if (key.isEmpty) {
       return const ConnectionTestResult(
@@ -195,6 +211,39 @@ class AiProviderService {
             );
           }
 
+        case AiProviderType.custom:
+          final b = (baseUrl ?? '').trim();
+          if (b.isEmpty) {
+            return const ConnectionTestResult(
+              success: false,
+              message: 'Base URL wajib untuk provider custom.',
+            );
+          }
+          final modelsUrl = b.endsWith('/') ? '${b}models' : '$b/models';
+          final res = await _client.get(
+            Uri.parse(modelsUrl),
+            headers: {'Authorization': 'Bearer $key'},
+          );
+          if (res.statusCode == 200) {
+            return ConnectionTestResult(
+              success: true,
+              message: 'Koneksi ke $b berhasil! Key valid.',
+              statusCode: 200,
+            );
+          } else if (res.statusCode == 401 || res.statusCode == 403) {
+            return ConnectionTestResult(
+              success: false,
+              message: 'API Key tidak valid atau izin ditolak (HTTP ${res.statusCode}).',
+              statusCode: res.statusCode,
+            );
+          } else {
+            return ConnectionTestResult(
+              success: false,
+              message: 'Gagal menghubungi $b: HTTP ${res.statusCode}.',
+              statusCode: res.statusCode,
+            );
+          }
+
         case AiProviderType.server:
           return const ConnectionTestResult(
             success: true,
@@ -226,6 +275,13 @@ class AiProviderService {
       case AiProviderType.groq:
         final k = await storage.getGroqKey();
         return k != null && k.trim().isNotEmpty;
+      case AiProviderType.custom:
+        final k = await storage.getCustomKey();
+        final b = await storage.getCustomBaseUrl();
+        return k != null &&
+            k.trim().isNotEmpty &&
+            b != null &&
+            b.trim().isNotEmpty;
       case AiProviderType.server:
         return false;
     }
@@ -302,8 +358,129 @@ class AiProviderService {
           throw Exception('${provider.name.toUpperCase()} API Error ${res.statusCode}: ${res.body}');
         }
 
+      case AiProviderType.custom:
+        final key = (await storage.getCustomKey()) ?? '';
+        final base = ((await storage.getCustomBaseUrl()) ?? '').trim();
+        final model = (await storage.getCustomModel()) ?? 'gpt-4o-mini';
+        if (base.isEmpty) {
+          throw StateError('Base URL custom belum diisi (Settings).');
+        }
+        final chatUrl = base.endsWith('/')
+            ? '${base}chat/completions'
+            : '$base/chat/completions';
+        final res = await _client.post(
+          Uri.parse(chatUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $key',
+          },
+          body: jsonEncode({
+            'model': model,
+            'messages': [
+              if (systemInstruction != null)
+                {'role': 'system', 'content': systemInstruction},
+              {'role': 'user', 'content': prompt},
+            ],
+          }),
+        );
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          return data['choices']?[0]?['message']?['content'] ?? '';
+        } else {
+          throw Exception(
+              'Custom provider ($base) Error ${res.statusCode}: ${res.body}');
+        }
+
       case AiProviderType.server:
         return 'Server Visary: $prompt';
+    }
+  }
+
+  /// ASR: transkripsi audio → [Transcript] (PRD-SPRINT-11 §2.2).
+  ///
+  /// Cloud via provider aktif (custom/openai/groq: multipart POST
+  /// `{baseUrl}/audio/transcriptions`, model whisper, `verbose_json` +
+  /// word timestamp). Fallback: transkrip kosong bila BYOK off — pipeline
+  /// tetap jalan (degraded). Gemini inline audio = future (text only).
+  Future<Transcript> transcribe({
+    required String audioFilePath,
+    String? language, // 'id'/'en'/null=auto
+  }) async {
+    final active = await isByokActive();
+    if (!active) {
+      return const Transcript(
+          fullText: '', words: [], language: null, provider: 'server');
+    }
+    final provider = await storage.getActiveProvider();
+    if (provider == AiProviderType.gemini) {
+      // TODO(PRD-SPRINT-11): Gemini inline audio base64 → text (no word ts).
+      return const Transcript(
+          fullText: '', words: [], language: null, provider: 'gemini');
+    }
+
+    final (base, key, model) = await _asrEndpoint(provider);
+    if (base.isEmpty) {
+      return Transcript(
+          fullText: '', words: [], language: null, provider: provider.name);
+    }
+    final url = base.endsWith('/')
+        ? '${base}audio/transcriptions'
+        : '$base/audio/transcriptions';
+    final req = http.MultipartRequest('POST', Uri.parse(url))
+      ..headers['Authorization'] = 'Bearer $key'
+      ..fields['model'] = model
+      ..fields['response_format'] = 'verbose_json'
+      ..fields['timestamp_granularities[]'] = 'word';
+    if (language != null) req.fields['language'] = language;
+    req.files.add(await http.MultipartFile.fromPath('file', audioFilePath));
+
+    final streamed = await _client.send(req);
+    final body = await streamed.stream.bytesToString();
+    if (streamed.statusCode != 200) {
+      throw Exception('ASR $provider Error ${streamed.statusCode}: $body');
+    }
+    final data = jsonDecode(body) as Map<String, dynamic>;
+    final text = (data['text'] as String?) ?? '';
+    final words = <WordToken>[];
+    final wList = data['words'] as List?;
+    if (wList != null) {
+      for (final w in wList) {
+        final wm = w as Map<String, dynamic>;
+        words.add(WordToken(
+          word: (wm['word'] as String?) ?? '',
+          start: ((wm['start'] as num?) ?? 0).toDouble(),
+          end: ((wm['end'] as num?) ?? 0).toDouble(),
+        ));
+      }
+    }
+    return Transcript(
+      fullText: text,
+      words: words,
+      language: (data['language'] as String?) ?? language,
+      provider: provider.name,
+    );
+  }
+
+  /// Resolve (baseUrl, apiKey, asrModel) untuk provider OpenAI-compatible.
+  /// Model ASR hardcoded per provider (whisper-1 / whisper-large-v3);
+  /// customModel (chat) tidak dipakai untuk ASR.
+  Future<(String, String, String)> _asrEndpoint(AiProviderType provider) async {
+    switch (provider) {
+      case AiProviderType.custom:
+        final base = (await storage.getCustomBaseUrl()) ?? '';
+        final key = (await storage.getCustomKey()) ?? '';
+        return (base, key, 'whisper-1');
+      case AiProviderType.openai:
+        return ('https://api.openai.com/v1/',
+            (await storage.getOpenAiKey()) ?? '',
+            'whisper-1');
+      case AiProviderType.groq:
+        return ('https://api.groq.com/openai/v1/',
+            (await storage.getGroqKey()) ?? '',
+            'whisper-large-v3');
+      case AiProviderType.gemini:
+      case AiProviderType.server:
+        return ('', '', '');
     }
   }
 }

@@ -14,6 +14,10 @@ class VideoSignals {
   final List<AudioEnergyPoint> energy;
   final double duration;
 
+  /// Hasil transkripsi ASR (PRD-SPRINT-11). null bila BYOK off / ASR gagal.
+  /// Di-set setelah scan oleh AppState (cloud transcribe).
+  Transcript? transcript;
+
   double energyAt(double t) {
     if (energy.isEmpty) return -90;
     final i = t.floor().clamp(0, energy.length - 1);
