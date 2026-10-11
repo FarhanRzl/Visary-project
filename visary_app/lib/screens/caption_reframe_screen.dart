@@ -324,6 +324,12 @@ class _CaptionReframeScreenState extends State<CaptionReframeScreen> {
                   child: ListView(
                     padding: const EdgeInsets.all(28),
                     children: withGaps([
+                      // Export Transcript — PRD-SPRINT-12 (di atas, selalu visible)
+                      Text('EXPORT TRANSCRIPT', style: VT.mono(11)),
+                      ..._buildExportSection(),
+
+                      const Divider(color: VC.ink, thickness: 2),
+
                       // Aspect Ratio Toggle
                       Text('ASPECT RATIO', style: VT.mono(11)),
                       Row(
@@ -439,12 +445,6 @@ class _CaptionReframeScreenState extends State<CaptionReframeScreen> {
                           _posBtn('BAWAH', 2),
                         ],
                       ),
-
-                      const Divider(color: VC.ink, thickness: 2),
-
-                      // Export Transcript — PRD-SPRINT-12
-                      Text('EXPORT TRANSCRIPT', style: VT.mono(11)),
-                      ..._buildExportSection(),
 
                       const Divider(color: VC.ink, thickness: 2),
 
