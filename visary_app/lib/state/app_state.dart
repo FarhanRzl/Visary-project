@@ -303,6 +303,10 @@ class AppState extends ChangeNotifier {
             outputPath: asrAudio,
           );
           signals.transcript = await aiService.transcribe(audioFilePath: asrAudio);
+          debugPrint(
+              '[ASR] transkrip: ${signals.transcript?.words.length ?? 0} words, '
+              'provider=${signals.transcript?.provider}, '
+              'empty=${signals.transcript?.isEmpty}');
         } catch (e) {
           debugPrint('ASR gagal (non-fatal, fallback tanpa transkrip): $e');
         }
