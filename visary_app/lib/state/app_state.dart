@@ -662,7 +662,10 @@ class AppState extends ChangeNotifier {
     return out;
   }
 
-  /// Export satu asset (hook / b-roll / sound bite) ke file terpisah.
+  /// Export satu asset (hook / b-roll / sound bite / audio) ke file terpisah.
+  ///
+  /// Aset audio (uploaded/extracted) disalin apa adanya — sourceFile-nya
+  /// sudah berupa file audio, bukan segmen video sumber (PRD-SPRINT-10).
   Future<String> exportAsset({
     required String projectId,
     required AssetItem asset,
@@ -670,10 +673,21 @@ class AppState extends ChangeNotifier {
   }) async {
     final p = byId(projectId);
     if (p == null) throw StateError('Project tidak ditemukan');
+    final safe = asset.title.replaceAll(RegExp(r'[^A-Za-z0-9_ -]'), '').trim();
+    final baseName = safe.isEmpty ? asset.id : safe;
+
+    // Aset audio — salin file audio apa adanya ke output (bukan extract video).
+    if (asset.type == AssetType.audio) {
+      final ext = _audioExt(asset.sourceFile);
+      final path = '$outputDir/$baseName.$ext';
+      await File(asset.sourceFile).copy(path);
+      return path;
+    }
+
+    // Aset segmen video (hook / b-roll / sound bite) — potong dari video sumber.
     final audioOnly = asset.type == AssetType.soundBite;
     final ext = audioOnly ? 'm4a' : 'mp4';
-    final safe = asset.title.replaceAll(RegExp(r'[^A-Za-z0-9_\- ]'), '').trim();
-    final path = '$outputDir/${safe.isEmpty ? asset.id : safe}.$ext';
+    final path = '$outputDir/$baseName.$ext';
     return VideoService.extractSegment(
       sourcePath: p.filePath,
       start: asset.start,
