@@ -55,37 +55,37 @@ class Resequencer {
     return segs.isEmpty ? [(0, duration)] : segs;
   }
 
-  /// Build ClipParts: setiap audio segment → satu video segment dengan
-  /// speed adjustment supaya durasi video match audio. PRD-SPRINT-13.
+  /// Build ClipParts: video dibagi urut (sequential) sesuai jumlah audio
+  /// segment, setiap segment di-speed-adjust supaya durasi match audio.
+  /// Tidak ada pengulangan — seluruh video dipakai sekali. PRD-SPRINT-13.
   List<ClipPart> buildParts({
     required List<double> cutPoints,
-    required List<(double, double)> videoSegments,
+    required double videoDuration,
     required double fallbackDuration,
   }) {
-    if (cutPoints.length < 2 || videoSegments.isEmpty) {
+    if (cutPoints.length < 2 || videoDuration <= 0) {
       return [ClipPart(0, fallbackDuration)];
     }
 
+    final numSegs = cutPoints.length - 1;
+    final videoSegDur = videoDuration / numSegs;
     final parts = <ClipPart>[];
-    var segIdx = 0;
 
-    for (var i = 0; i < cutPoints.length - 1; i++) {
-      final audioStart = cutPoints[i];
-      final audioEnd = cutPoints[i + 1];
-      final audioDur = audioEnd - audioStart;
+    for (var i = 0; i < numSegs; i++) {
+      final audioDur = cutPoints[i + 1] - cutPoints[i];
       if (audioDur <= 0) continue;
 
-      final (vStart, vEnd) = videoSegments[segIdx % videoSegments.length];
-      final vDur = vEnd - vStart;
-      if (vDur <= 0) continue;
+      // Sequential video segment: bagian video berurutan, tidak cycle.
+      final vStart = i * videoSegDur;
+      final vEnd = (i + 1) * videoSegDur;
 
-      // Speed-adjust: match video segment duration ke audio segment duration.
-      // speed > 1 = percepat, speed < 1 = slowmo. Clamp 0.25x–4x.
-      final rawSpeed = vDur / audioDur;
+      // Speed-adjust: videoSegDur / audioDur.
+      // audio lama + video pendek → speed < 1 (slowmo).
+      // audio pendek + video panjang → speed > 1 (percepat).
+      final rawSpeed = videoSegDur / audioDur;
       final speed = rawSpeed.clamp(0.25, 4.0);
 
       parts.add(ClipPart(vStart, vEnd, speed));
-      segIdx++;
     }
 
     return parts.isEmpty ? [ClipPart(0, fallbackDuration)] : parts;
@@ -102,12 +102,11 @@ class Resequencer {
     if (t == null || t.words.isEmpty) return clips;
 
     final cutPoints = detectCutPoints(t.words);
-    final segs = videoSegments(signals, videoDuration);
 
     return clips.map((clip) {
       final newParts = buildParts(
         cutPoints: cutPoints,
-        videoSegments: segs,
+        videoDuration: videoDuration,
         fallbackDuration: clip.duration,
       );
       return clip.copyWith(

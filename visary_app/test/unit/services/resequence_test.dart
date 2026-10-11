@@ -70,55 +70,55 @@ void main() {
     });
   });
 
-  group('buildParts (speed-adjust)', () {
-    test('video lebih panjang dari audio → speed up (clamped 4x)', () {
-      // Audio: 3 segments of 1s. Video: 3 segments of 5s.
+  group('buildParts (sequential + speed-adjust)', () {
+    test('3 audio segments, video 15s → 3 sequential video segments', () {
+      // Audio: 3 segments of 1s each (total 3s). Video: 15s.
+      // videoSegDur = 15/3 = 5s per segment.
       // speed = 5/1 = 5.0 → clamped to 4.0
       final cutPoints = [0.0, 1.0, 2.0, 3.0];
-      final videoSegs = <(double, double)>[(0, 5), (5, 10), (10, 15)];
 
       final parts = r.buildParts(
         cutPoints: cutPoints,
-        videoSegments: videoSegs,
+        videoDuration: 15,
         fallbackDuration: 10,
       );
 
       expect(parts.length, 3);
+      // Sequential: 0-5, 5-10, 10-15 (no cycling)
       expect(parts[0].start, 0);
-      expect(parts[0].end, 5); // full segment taken
+      expect(parts[0].end, 5);
       expect(parts[0].speed, 4.0); // clamped from 5.0
-      expect(parts[0].duration, closeTo(1.25, 0.01)); // 5/4=1.25
       expect(parts[1].start, 5);
-      expect(parts[1].speed, 4.0);
+      expect(parts[1].end, 10);
       expect(parts[2].start, 10);
-      expect(parts[2].speed, 4.0);
+      expect(parts[2].end, 15);
     });
 
-    test('video lebih pendek dari audio → slowmo (clamped 0.25x)', () {
-      // Audio: 10s. Video: 2s. speed = 2/10 = 0.2 → clamped to 0.25
+    test('audio lebih panjang dari video → slowmo', () {
+      // Audio: 10s, 1 segment. Video: 2s.
+      // videoSegDur = 2/1 = 2s. speed = 2/10 = 0.2 → clamped 0.25
       final cutPoints = [0.0, 10.0];
-      final videoSegs = <(double, double)>[(0, 2)];
 
       final parts = r.buildParts(
         cutPoints: cutPoints,
-        videoSegments: videoSegs,
+        videoDuration: 2,
         fallbackDuration: 10,
       );
 
       expect(parts.length, 1);
       expect(parts[0].start, 0);
-      expect(parts[0].end, 2); // full segment
+      expect(parts[0].end, 2);
       expect(parts[0].speed, 0.25); // clamped from 0.2
       expect(parts[0].duration, closeTo(8.0, 0.01)); // 2/0.25=8
     });
 
     test('video dan audio sama durasi → speed 1.0', () {
+      // 1 segment, video 5s, audio 5s. speed = 5/5 = 1.0
       final cutPoints = [0.0, 5.0];
-      final videoSegs = <(double, double)>[(0, 5)];
 
       final parts = r.buildParts(
         cutPoints: cutPoints,
-        videoSegments: videoSegs,
+        videoDuration: 5,
         fallbackDuration: 10,
       );
 
@@ -126,34 +126,36 @@ void main() {
       expect(parts[0].duration, 5.0);
     });
 
-    test('cycle: more audio segments than video segments', () {
-      final cutPoints = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]; // 5 segments of 1s
-      final videoSegs = <(double, double)>[(0, 3), (3, 6)]; // 2 of 3s
+    test('5 audio segments, video 15s → 5 sequential segments of 3s', () {
+      // videoSegDur = 15/5 = 3s. Audio segments: 1s each.
+      // speed = 3/1 = 3.0
+      final cutPoints = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
 
       final parts = r.buildParts(
         cutPoints: cutPoints,
-        videoSegments: videoSegs,
+        videoDuration: 15,
         fallbackDuration: 10,
       );
 
       expect(parts.length, 5);
-      // speed = 3/1 = 3.0
+      // Sequential: 0-3, 3-6, 6-9, 9-12, 12-15
       expect(parts[0].start, 0);
+      expect(parts[0].end, 3);
       expect(parts[0].speed, 3.0);
       expect(parts[1].start, 3);
-      expect(parts[2].start, 0); // cycle
-      expect(parts[3].start, 3);
-      expect(parts[4].start, 0);
+      expect(parts[2].start, 6);
+      expect(parts[3].start, 9);
+      expect(parts[4].start, 12);
+      expect(parts[4].end, 15);
     });
 
-    test('slowmo 2x: speed 0.5 (within range, no clamp)', () {
-      // Audio 4s, video 2s → speed = 0.5
+    test('slowmo 2x: speed 0.5 (within range)', () {
+      // 1 segment, video 2s, audio 4s. speed = 2/4 = 0.5
       final cutPoints = [0.0, 4.0];
-      final videoSegs = <(double, double)>[(0, 2)];
 
       final parts = r.buildParts(
         cutPoints: cutPoints,
-        videoSegments: videoSegs,
+        videoDuration: 2,
         fallbackDuration: 10,
       );
 
@@ -164,12 +166,22 @@ void main() {
     test('empty cutPoints → fallback (speed 1.0)', () {
       final parts = r.buildParts(
         cutPoints: [],
-        videoSegments: [(0, 10)],
+        videoDuration: 10,
         fallbackDuration: 5,
       );
       expect(parts.length, 1);
       expect(parts[0].duration, 5);
       expect(parts[0].speed, 1.0);
+    });
+
+    test('videoDuration 0 → fallback', () {
+      final parts = r.buildParts(
+        cutPoints: [0.0, 1.0],
+        videoDuration: 0,
+        fallbackDuration: 5,
+      );
+      expect(parts.length, 1);
+      expect(parts[0].duration, 5);
     });
   });
 
