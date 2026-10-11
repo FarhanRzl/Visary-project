@@ -34,3 +34,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/videos/sample.mp4
+  fonts:
+    - family: NotoSansSC
+      fonts:
+        - asset: assets/fonts/NotoSansSC.ttf
