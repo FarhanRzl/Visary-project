@@ -156,13 +156,40 @@ class _ExportModalState extends State<ExportModal> {
     });
   }
 
+  /// Baris indikator mode audio saat ini (PRD-SPRINT-10).
+  Widget _audioModeRow(Project project) {
+    final mode = project.audioMode;
+    final (label, color) = switch (mode) {
+      AudioMode.original => ('AUDIO ASLI', VC.muted),
+      AudioMode.muted => ('AUDIO MUTED', VC.yellow),
+      AudioMode.replacement => (
+          'AUDIO: ${project.activeAudioAsset?.title ?? 'pengganti'}',
+          VC.purple),
+    };
+    return Container(
+      margin: const EdgeInsets.only(top: 12, bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color,
+        border: Border.all(color: VC.ink, width: 2),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.graphic_eq, size: 16, color: VC.ink),
+          const SizedBox(width: 8),
+          Text(label, style: VT.mono(11, color: VC.ink)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.read<AppState>();
     final project = state.byId(widget.projectId);
     final clip = project?.clips.where((c) => c.id == widget.clipId).firstOrNull;
 
-    if (clip == null) {
+    if (project == null || clip == null) {
       return BBox(
         color: VC.paper,
         border: VB.thick,
@@ -445,6 +472,9 @@ class _ExportModalState extends State<ExportModal> {
               ),
             ),
           ),
+
+          // Audio mode indicator (PRD-SPRINT-10)
+          _audioModeRow(project),
 
           // Disabled Phase 2 formats
           Opacity(
