@@ -228,6 +228,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'Masukkan API key pribadi Anda untuk membuka fitur AI tanpa batasan kuota internal Visary.',
             style: VT.body(13, color: VC.muted),
           ),
+          const SizedBox(height: 16),
+          BBox(
+            shadow: 2,
+            padding: const EdgeInsets.all(16),
+            color: VC.paper,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.help_outline, size: 16, color: VC.purple),
+                    const SizedBox(width: 8),
+                    Text('API KEY YANG BISA DIPAKAI', style: VT.display(14)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                    '• Gemini (AIza...) — LLM/B-roll sekarang; ASR text-only (segera via S11).',
+                    style: VT.mono(11, color: VC.ink)),
+                Text(
+                    '• OpenAI (sk-proj...) — LLM/B-roll sekarang; ASR whisper-1 + TTS tts-1 (segera/deferred).',
+                    style: VT.mono(11, color: VC.ink)),
+                Text(
+                    '• Groq (gsk_...) — LLM/B-roll sekarang; ASR whisper-large-v3 (segera).',
+                    style: VT.mono(11, color: VC.ink)),
+                Text(
+                    '• Custom / Tokonomix (tok_live...) — segera via S11: ASR + LLM via base URL konfigurabel.',
+                    style: VT.mono(11, color: VC.ink)),
+                Text(
+                    '• Antigravity Pro — chat/vision LLM only, tidak support speech (ASR/TTS).',
+                    style: VT.mono(11, color: VC.ink)),
+                const SizedBox(height: 10),
+                Text(
+                  'Sekarang key dipakai untuk fitur AI B-roll. ASR (transkrip caption) segera via S11. TTS (voiceover) menunggu persetujuan. Tanpa key: app tetap jalan mode lokal (shots/energi/OCR).',
+                  style: VT.body(11, color: VC.muted),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 24),
 
           // Provider Selector
