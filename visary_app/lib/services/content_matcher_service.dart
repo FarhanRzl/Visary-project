@@ -449,6 +449,9 @@ class ContentMatcherService {
 
   /// Fallback: distribute frames evenly across segments.
   /// Public for use by AppState when matchContentRanges throws.
+  ///
+  /// When segCount > frameCount, some segments share the same frame
+  /// (perSeg=0 → start clamped to frameCount-1, end=start).
   List<(int, int)> fallbackRanges(int frameCount, int segCount) {
     if (frameCount <= 0 || segCount <= 0) return [];
     final perSeg = frameCount ~/ segCount;
@@ -457,6 +460,8 @@ class ContentMatcherService {
     for (var i = 0; i < segCount; i++) {
       var end = start + perSeg - 1;
       if (i == segCount - 1) end = frameCount - 1; // last gets remainder
+      // Clamp start first to valid range, then end to [start, frameCount-1].
+      start = start.clamp(0, frameCount - 1);
       end = end.clamp(start, frameCount - 1);
       ranges.add((start, end));
       start = end + 1;
