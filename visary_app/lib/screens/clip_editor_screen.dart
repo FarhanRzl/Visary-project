@@ -34,16 +34,45 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
   int _captionPosition = 2; // 0 = Atas, 1 = Tengah, 2 = Bawah (default bawah)
   int _activeWordIdx = 0;
 
-  /// Caption text for live overlay — from transcript words or fallback.
+  /// Caption text for live overlay — sync dengan playhead.
+  /// Tampilkan hanya kata aktif (atau window ±2 kata di sekitar playhead)
+  /// berdasarkan word-level timestamps dari transcript.
+  /// Fallback bila transcript kosong: clip title atau timestamp.
   List<String> get _captionWords {
     final state = context.read<AppState>();
     final transcript = state.signalsOf(widget.projectId)?.transcript;
     if (transcript != null && transcript.words.isNotEmpty) {
-      return transcript.words
-          .map((w) => w.word.trim())
-          .where((w) => w.isNotEmpty)
-          .toList();
+      // Cari kata aktif: word.start <= playhead <= word.end
+      int activeIdx = -1;
+      for (var i = 0; i < transcript.words.length; i++) {
+        final w = transcript.words[i];
+        if (_playheadSec >= w.start && _playheadSec <= w.end) {
+          activeIdx = i;
+          break;
+        }
+      }
+      // Bila tidak ada exact match, cari kata terdekat sebelum playhead
+      if (activeIdx == -1) {
+        for (var i = transcript.words.length - 1; i >= 0; i--) {
+          if (transcript.words[i].start <= _playheadSec) {
+            activeIdx = i;
+            break;
+          }
+        }
+      }
+      if (activeIdx >= 0) {
+        // Window: 2 kata sebelum + kata aktif + 2 kata sesudah (max 5 kata)
+        final start = (activeIdx - 2).clamp(0, transcript.words.length - 1);
+        final end = (activeIdx + 3).clamp(0, transcript.words.length);
+        return transcript.words
+            .sublist(start, end)
+            .map((w) => w.word.trim())
+            .where((w) => w.isNotEmpty)
+            .toList();
+      }
+      return [];
     }
+    // Fallback: clip title
     final project = state.byId(widget.projectId);
     if (project != null && project.clips.isNotEmpty &&
         _selectedClipIndex < project.clips.length) {
@@ -293,8 +322,8 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
                       ),
                     ),
                   ),
-                  const Spacer(),
-                  // Filename in center
+                  const SizedBox(width: 16),
+                  // Filename (flexible, ellipsis)
                   Flexible(
                     child: Text(
                       fileName,
@@ -303,67 +332,75 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
                       maxLines: 1,
                     ),
                   ),
-                  const Spacer(),
-                  // Navigasi Hook Finder & Caption Reframe
-                  BButton(
-                    label: 'HOOK FINDER',
-                    icon: Icons.auto_awesome,
-                    kind: BtnKind.outline,
-                    small: true,
-                    onTap: () => Navigator.of(context)
-                        .pushNamed('/hooks', arguments: widget.projectId),
-                  ),
-                  const SizedBox(width: 8),
-                  BButton(
-                    label: 'ASSET LIBRARY',
-                    icon: Icons.perm_media,
-                    kind: BtnKind.outline,
-                    small: true,
-                    onTap: () => Navigator.of(context).pushNamed('/assets'),
-                  ),
-                  const SizedBox(width: 8),
-                  BButton(
-                    label: 'AUDIO',
-                    icon: Icons.graphic_eq,
-                    kind: project.audioMode != AudioMode.original
-                        ? BtnKind.yellow
-                        : BtnKind.outline,
-                    small: true,
-                    onTap: _isAudioProcessing ? null : () => _openAudioPanel(project),
-                  ),
-                  const SizedBox(width: 12),
-                  // Cancel & Export buttons
-                  BButton(
-                    label: 'CANCEL',
-                    kind: BtnKind.outline,
-                    small: true,
-                    onTap: () => Navigator.of(context).pop(),
-                  ),
-                  const SizedBox(width: 8),
-                  BButton(
-                    label: 'EXPORT',
-                    icon: Icons.download,
-                    kind: BtnKind.dark,
-                    small: true,
-                    onTap: () {
-                      final clips = project.clips;
-                      if (clips.isEmpty) {
-                        showBrutalSnack(context, 'Belum ada clip untuk diexport.');
-                        return;
-                      }
-                      final clipId = clips[_selectedClipIndex.clamp(0, clips.length - 1)].id;
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => Dialog(
-                          backgroundColor: Colors.transparent,
-                          elevation: 0,
-                          child: ExportModal(
-                            projectId: widget.projectId,
-                            clipId: clipId,
+                  const SizedBox(width: 16),
+                  // Action buttons — wrap agar tidak overflow
+                  Flexible(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          BButton(
+                            label: 'HOOK FINDER',
+                            icon: Icons.auto_awesome,
+                            kind: BtnKind.outline,
+                            small: true,
+                            onTap: () => Navigator.of(context)
+                                .pushNamed('/hooks', arguments: widget.projectId),
                           ),
-                        ),
-                      );
-                    },
+                          const SizedBox(width: 8),
+                          BButton(
+                            label: 'ASSETS',
+                            icon: Icons.perm_media,
+                            kind: BtnKind.outline,
+                            small: true,
+                            onTap: () => Navigator.of(context).pushNamed('/assets'),
+                          ),
+                          const SizedBox(width: 8),
+                          BButton(
+                            label: 'AUDIO',
+                            icon: Icons.graphic_eq,
+                            kind: project.audioMode != AudioMode.original
+                                ? BtnKind.yellow
+                                : BtnKind.outline,
+                            small: true,
+                            onTap: _isAudioProcessing ? null : () => _openAudioPanel(project),
+                          ),
+                          const SizedBox(width: 8),
+                          BButton(
+                            label: 'CANCEL',
+                            kind: BtnKind.outline,
+                            small: true,
+                            onTap: () => Navigator.of(context).pop(),
+                          ),
+                          const SizedBox(width: 8),
+                          BButton(
+                            label: 'EXPORT',
+                            icon: Icons.download,
+                            kind: BtnKind.dark,
+                            small: true,
+                            onTap: () {
+                              final clips = project.clips;
+                              if (clips.isEmpty) {
+                                showBrutalSnack(context, 'Belum ada clip untuk diexport.');
+                                return;
+                              }
+                              final clipId = clips[_selectedClipIndex.clamp(0, clips.length - 1)].id;
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => Dialog(
+                                  backgroundColor: Colors.transparent,
+                                  elevation: 0,
+                                  child: ExportModal(
+                                    projectId: widget.projectId,
+                                    clipId: clipId,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
