@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../state/app_state.dart';
+import '../services/ai_provider_service.dart';
 import '../theme/tokens.dart';
 import 'brutal.dart';
 
@@ -98,9 +99,18 @@ class _AudioPanelState extends State<AudioPanel> {
 
   /// Transkripsi audio pengganti → re-sequence clips. PRD-SPRINT-13.
   Future<void> _transcribeAudio() async {
+    final state = context.read<AppState>();
+    // Gemini timestamp warning (PRD-SPRINT-16 §2.5).
+    // Gemini tidak punya word-level timestamps → estimasi kurang presisi.
+    final provider = await state.aiService.storage.getActiveProvider();
+    if (provider == AiProviderType.gemini && mounted) {
+      showBrutalSnack(context,
+          'Estimasi timestamp (Gemini) — kurang presisi. '
+          'Untuk word-level akurat, gunakan OpenAI/Groq/Custom (Whisper) di Settings.',
+          color: VC.yellow);
+    }
     setState(() => _isTranscribing = true);
     try {
-      final state = context.read<AppState>();
       await state.transcribeReplacementAudio(widget.projectId);
       if (mounted) {
         final t = state.signalsOf(widget.projectId)?.transcript;

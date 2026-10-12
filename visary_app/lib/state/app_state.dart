@@ -663,32 +663,7 @@ class AppState extends ChangeNotifier {
     _put(p.copyWith(clips: newClips));
   }
 
-  /// Apply matchOrder ke clip parts tanpa word-boundary resequencing.
-  /// Dipakai saat content matching jalan tanpa transcript (visual-only).
-  /// Video dibagi N segmen sesuai matchOrder, speed-adjust ke durasi clip.
-  /// PRD-SPRINT-15 §2.5.
-  void _resequenceVisualOnly(String projectId, List<int> matchOrder) {
-    final p = byId(projectId);
-    if (p == null || matchOrder.isEmpty) return;
-    final videoDuration = p.probe?.durationSec ?? 0;
-    if (videoDuration <= 0) return;
-
-    final numSegs = matchOrder.length;
-    final videoSegDur = videoDuration / numSegs;
-    final newClips = p.clips.map((clip) {
-      final parts = <ClipPart>[];
-      for (var i = 0; i < numSegs; i++) {
-        final segIdx = matchOrder[i];
-        final vStart = segIdx * videoSegDur;
-        final vEnd = (segIdx + 1) * videoSegDur;
-        parts.add(ClipPart(vStart, vEnd, 1.0));
-      }
-      return clip.copyWith(parts: parts, type: ClipType.resequenced);
-    }).toList();
-    _put(p.copyWith(clips: newClips));
-  }
-
-  // ─────── CONTENT-AWARE MATCHING (PRD-SPRINT-14) ───────────
+  // ─────── CONTENT-AWARE MATCHING (PRD-SPRINT-14 + S16) ───────────
 
   /// Multi-stage content-aware re-sequencing pipeline.
   /// PRD-SPRINT-14 §2.7.
@@ -795,24 +770,29 @@ class AppState extends ChangeNotifier {
       return [];
     }
 
-    // ── Stage 3: Extract audio topics (skip if no transcript) ──
-    List<String> audioTopics = [];
-    // hasTranscript sudah cek t != null, tapi analyzer perlu konfirmasi.
+    // ── Stage 3: Semantic segmentation (S16) ──
+    // S16: 1 LLM call splits transcript into N segments = shot count.
+    // Fallback: detectCutPoints (S13 timing) → cutPointsToSegments.
+    final shotCount = frameTimestamps.length;
+    List<TranscriptSegment> segments;
     // ignore: unnecessary_null_comparison
     if (hasTranscript && t != null) {
-      onProgress?.call('Extracting topics...');
-      final cutPoints = _resequencer.detectCutPoints(t.words);
-      try {
-        audioTopics = await matcher.extractTopics(
-          words: t.words,
-          cutPoints: cutPoints,
-        );
-      } catch (e) {
-        debugPrint('[S14] extractTopics gagal: $e → visual-only matching');
+      onProgress?.call('Segmenting transcript by context...');
+      segments = await matcher.segmentByContext(
+        transcript: t,
+        targetSegments: shotCount,
+      );
+      if (segments.isEmpty) {
+        // Fallback: S13 timing-based cut points.
+        debugPrint('[S16] semantic segment gagal → fallback timing');
+        final cutPoints = _resequencer.detectCutPoints(t.words);
+        segments = _resequencer.cutPointsToSegments(cutPoints, t.words);
       }
     } else {
+      // Visual-only: no transcript → sequential segments.
       onProgress?.call('Visual-only matching (no transcript)...');
-      debugPrint('[S15] no transcript → visual-only matching');
+      debugPrint('[S16] no transcript → visual-only sequential segments');
+      segments = _resequencer.sequentialSegments(shotCount, videoDuration);
     }
 
     // ── Stage 4: Match content via LLM ──
@@ -820,28 +800,28 @@ class AppState extends ChangeNotifier {
     try {
       matchOrder = await matcher.matchContent(
         visualDescriptions: visualDescriptions,
-        audioTopics: audioTopics,
+        segments: segments,
       );
     } catch (e) {
-      debugPrint('[S14] matchContent gagal: $e → fallback timing-based');
-      matchOrder = null;
+      debugPrint('[S16] matchContent gagal: $e → fallback sequential');
+      matchOrder = List.generate(segments.length, (i) => i);
     }
 
-    // ── Stage 5: Resequence with matchOrder ──
-    // Dengan transcript: resequence clips dengan matchOrder (content-aware).
-    // Tanpa transcript: hanya apply matchOrder ke clip parts (visual-only),
-    // tidak pakai word-boundary resequencing karena tidak ada word timestamps.
+    // ── Stage 5: Resequence with segments + matchOrder ──
     onProgress?.call('Re-sequencing clips...');
-    if (hasTranscript) {
-      resequenceClips(projectId, matchOrder: matchOrder);
-    } else if (matchOrder != null && matchOrder.isNotEmpty) {
-      // Visual-only: apply matchOrder ke clip parts tanpa word-boundary.
-      _resequenceVisualOnly(projectId, matchOrder);
+    if (segments.isNotEmpty) {
+      final newClips = _resequencer.resequenceWithSegments(
+        clips: p.clips,
+        segments: segments,
+        videoDuration: videoDuration,
+        matchOrder: matchOrder,
+      );
+      _put(p.copyWith(clips: newClips));
     }
     notifyListeners();
 
     onProgress?.call('Done');
-    return matchOrder ?? [];
+    return matchOrder;
   }
 
   // ─────────────────── B-ROLL RECOMMENDATION (PRD-SPRINT-05) ──────────────

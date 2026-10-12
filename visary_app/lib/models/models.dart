@@ -150,6 +150,29 @@ class ClipPart {
   double get duration => sourceDuration / speed;
 }
 
+/// Segmen transcript berdasarkan konteks/topik (PRD-SPRINT-16).
+/// Dihasilkan oleh LLM semantic segmentation, bukan timing-based cut.
+class TranscriptSegment {
+  final int startWord; // index kata awal (0-based)
+  final int endWord; // index kata akhir (inclusive)
+  final String topic; // label topik 2-3 kata
+  final double startSec; // diturunkan dari word[startWord].start
+  final double endSec; // diturunkan dari word[endWord].end
+
+  const TranscriptSegment({
+    required this.startWord,
+    required this.endWord,
+    required this.topic,
+    required this.startSec,
+    required this.endSec,
+  });
+
+  double get duration => endSec - startSec;
+
+  /// Apakah segmen ini valid (punya durasi > 0).
+  bool get isValid => duration > 0 && endWord >= startWord;
+}
+
 class Clip {
   final String id;
   final String title;

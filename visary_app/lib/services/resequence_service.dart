@@ -99,7 +99,114 @@ class Resequencer {
     return parts.isEmpty ? [ClipPart(0, fallbackDuration)] : parts;
   }
 
-  /// Re-sequence semua clip dalam project berdasarkan transcript.
+  // ── S16: Semantic segment-based resequencing ──
+
+  /// Build ClipParts dari semantic segments + matchOrder. PRD-SPRINT-16 §2.4.
+  ///
+  /// Setiap segmen punya: audio duration (segment.duration), video segment
+  /// index (matchOrder[i]), speed-adjust clamp 0.25x–4x.
+  List<ClipPart> buildPartsWithSegments({
+    required List<TranscriptSegment> segments,
+    required double videoDuration,
+    required double fallbackDuration,
+    List<int>? matchOrder,
+  }) {
+    if (segments.isEmpty || videoDuration <= 0) {
+      return [ClipPart(0, fallbackDuration)];
+    }
+
+    final numSegs = segments.length;
+    final videoSegDur = videoDuration / numSegs;
+    final parts = <ClipPart>[];
+
+    for (var i = 0; i < numSegs; i++) {
+      final audioDur = segments[i].duration;
+      if (audioDur <= 0) continue;
+
+      final segIdx = (matchOrder != null && i < matchOrder.length)
+          ? matchOrder[i]
+          : i;
+      final vStart = segIdx * videoSegDur;
+      final vEnd = (segIdx + 1) * videoSegDur;
+
+      final rawSpeed = videoSegDur / audioDur;
+      final speed = rawSpeed.clamp(0.25, 4.0);
+
+      parts.add(ClipPart(vStart, vEnd, speed));
+    }
+
+    return parts.isEmpty ? [ClipPart(0, fallbackDuration)] : parts;
+  }
+
+  /// Re-sequence semua clip dengan semantic segments. PRD-SPRINT-16 §2.4.
+  /// Returns new clips list (does not mutate state).
+  List<Clip> resequenceWithSegments({
+    required List<Clip> clips,
+    required List<TranscriptSegment> segments,
+    required double videoDuration,
+    List<int>? matchOrder,
+  }) {
+    if (segments.isEmpty) return clips;
+
+    return clips.map((clip) {
+      final newParts = buildPartsWithSegments(
+        segments: segments,
+        videoDuration: videoDuration,
+        fallbackDuration: clip.duration,
+        matchOrder: matchOrder,
+      );
+      return clip.copyWith(
+        parts: newParts,
+        type: ClipType.resequenced,
+      );
+    }).toList();
+  }
+
+  /// Convert timing-based cutPoints → TranscriptSegments (fallback S16 §2.7).
+  /// Dipakai saat semantic segmentation gagal → fallback ke detectCutPoints.
+  List<TranscriptSegment> cutPointsToSegments(
+      List<double> cutPoints, List<WordToken> words) {
+    if (cutPoints.length < 2 || words.isEmpty) return [];
+
+    final segments = <TranscriptSegment>[];
+    for (var i = 0; i < cutPoints.length - 1; i++) {
+      final segStart = cutPoints[i];
+      final segEnd = cutPoints[i + 1];
+      final segWords =
+          words.where((w) => w.start >= segStart && w.end <= segEnd).toList();
+      if (segWords.isEmpty) continue;
+
+      final sw = words.indexOf(segWords.first);
+      final ew = words.indexOf(segWords.last);
+      segments.add(TranscriptSegment(
+        startWord: sw,
+        endWord: ew,
+        topic: '',
+        startSec: segStart,
+        endSec: segEnd,
+      ));
+    }
+    return segments;
+  }
+
+  /// Build sequential segments (visual-only fallback, no transcript).
+  /// PRD-SPRINT-16 §2.7 + S15 §2.5.
+  List<TranscriptSegment> sequentialSegments(
+      int count, double videoDuration) {
+    if (count <= 0 || videoDuration <= 0) return [];
+    final segDur = videoDuration / count;
+    return List.generate(count, (i) {
+      return TranscriptSegment(
+        startWord: 0,
+        endWord: 0,
+        topic: 'segment ${i + 1}',
+        startSec: i * segDur,
+        endSec: (i + 1) * segDur,
+      );
+    });
+  }
+
+  /// Build ClipParts: video dibagi urut (sequential atau matchOrder) sesuai
   /// Returns new clips list (does not mutate state).
   ///
   /// Bila [matchOrder] diberikan (PRD-SPRINT-14), gunakan content-aware
