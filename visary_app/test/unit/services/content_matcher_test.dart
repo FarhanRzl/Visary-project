@@ -219,10 +219,12 @@ class _FakeAiProvider extends AiProviderService {
   _FakeAiProvider({
     this.sendPromptHandler,
     this.visionHandler,
+    this.visionBatchHandler,
   }) : super();
 
   final String Function(String prompt)? sendPromptHandler;
   final String Function(String prompt, String imageBase64)? visionHandler;
+  final List<String> Function(List<String> imageBase64List)? visionBatchHandler;
 
   @override
   Future<String> sendPrompt({required String prompt, String? systemInstruction}) async {
@@ -238,5 +240,19 @@ class _FakeAiProvider extends AiProviderService {
   }) async {
     if (visionHandler != null) return visionHandler!(prompt, imageBase64);
     return 'mock-vision-response';
+  }
+
+  @override
+  Future<List<String>> visionBatchPrompt({
+    required List<String> imageBase64List,
+    String mimeType = 'image/jpeg',
+    String? promptText,
+  }) async {
+    if (visionBatchHandler != null) return visionBatchHandler!(imageBase64List);
+    // Default: return per-frame descriptions via visionHandler.
+    return imageBase64List.map((b64) {
+      if (visionHandler != null) return visionHandler!('describe', b64).trim();
+      return 'mock-batch-desc';
+    }).toList();
   }
 }

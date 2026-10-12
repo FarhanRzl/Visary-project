@@ -39,10 +39,28 @@ class ContentMatcherService {
     }
 
     // Batch: 1 API call for all frames.
+    final validB64 = b64List.where((b) => b.isNotEmpty).toList();
+    if (validB64.isEmpty) {
+      // All frames failed to read → return empty descriptions per frame.
+      return List.generate(framePaths.length, (_) => '');
+    }
     try {
-      return await _ai.visionBatchPrompt(
-        imageBase64List: b64List.where((b) => b.isNotEmpty).toList(),
+      final batchDescs = await _ai.visionBatchPrompt(
+        imageBase64List: validB64,
       );
+      // Map batch results back to original frame positions.
+      final descriptions = <String>[];
+      var validIdx = 0;
+      for (final b64 in b64List) {
+        if (b64.isEmpty) {
+          descriptions.add('');
+        } else {
+          descriptions.add(
+            validIdx < batchDescs.length ? batchDescs[validIdx] : '');
+          validIdx++;
+        }
+      }
+      return descriptions;
     } catch (e) {
       debugPrint('[ContentMatcher] batch describeFrames gagal: $e → per-frame fallback');
       // Fallback: per-frame (lama, boras quota).
