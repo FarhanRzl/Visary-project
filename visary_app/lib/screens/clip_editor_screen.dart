@@ -9,6 +9,7 @@ import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/tokens.dart';
 import '../widgets/brutal.dart';
+import '../widgets/caption_reframe_panel.dart';
 import '../widgets/export_dialog.dart';
 import '../widgets/pro_timeline.dart';
 import '../widgets/audio_panel.dart';
@@ -26,6 +27,32 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
   final _promptCtrl = TextEditingController();
   String _selectedAspectRatio = '9:16';
   int _selectedClipIndex = 0;
+
+  // Caption & Reframe state — migrated from CaptionReframeScreen (PRD-SPRINT-18)
+  int _reframeMode = 0; // 0 = Ikuti Subjek, 1 = Blur-Pad
+  int _captionPreset = 0; // 0 = Pop Kuning, 1 = Bold Putih, 2 = Pink Box
+  int _captionPosition = 2; // 0 = Atas, 1 = Tengah, 2 = Bawah (default bawah)
+  int _activeWordIdx = 0;
+
+  /// Caption text for live overlay — from transcript words or fallback.
+  List<String> get _captionWords {
+    final state = context.read<AppState>();
+    final transcript = state.signalsOf(widget.projectId)?.transcript;
+    if (transcript != null && transcript.words.isNotEmpty) {
+      return transcript.words
+          .map((w) => w.word.trim())
+          .where((w) => w.isNotEmpty)
+          .toList();
+    }
+    final project = state.byId(widget.projectId);
+    if (project != null && project.clips.isNotEmpty &&
+        _selectedClipIndex < project.clips.length) {
+      return [project.clips[_selectedClipIndex].title];
+    }
+    return ['Detik ${_playheadSec.toStringAsFixed(1)}s'];
+  }
+
+  String get _captionText => _captionWords.join(' ');
 
   double _playheadSec = 24.0;
   double _clipStartSec = 24.0;
@@ -288,13 +315,11 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
                   ),
                   const SizedBox(width: 8),
                   BButton(
-                    label: 'CAPTION & REFRAME',
-                    icon: Icons.subtitles,
+                    label: 'ASSET LIBRARY',
+                    icon: Icons.perm_media,
                     kind: BtnKind.outline,
                     small: true,
-                    onTap: () => Navigator.of(context).pushNamed(
-                        '/caption-reframe',
-                        arguments: project.id),
+                    onTap: () => Navigator.of(context).pushNamed('/assets'),
                   ),
                   const SizedBox(width: 8),
                   BButton(
@@ -420,42 +445,28 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
                                   ),
                                 ),
                               ),
-                              // Subtitle / Caption at bottom (klik untuk buka Caption & Reframe)
+                              // Live caption overlay — preview based on sidebar preset/position (PRD-SPRINT-18)
                               Positioned(
-                                bottom: 24,
+                                top: _captionPosition == 0 ? 50 : null,
+                                bottom: _captionPosition == 2 ? 24 : null,
                                 left: 16,
                                 right: 16,
-                                child: Clickable(
-                                  onTap: () => Navigator.of(context).pushNamed(
-                                      '/caption-reframe',
-                                      arguments: project.id),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 14, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withValues(alpha: 0.85),
-                                      border:
-                                          Border.all(color: VC.ink, width: 1.5),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          (project.clips.isNotEmpty && _selectedClipIndex < project.clips.length)
-                                              ? project.clips[_selectedClipIndex].title
-                                              : 'Detik ${_playheadSec.toStringAsFixed(1)}s',
-                                          textAlign: TextAlign.center,
-                                          style:
-                                              VT.mono(12, color: Colors.white),
+                                child: _captionPosition == 1
+                                    ? Center(
+                                        child: buildCaptionOverlay(
+                                          preset: _captionPreset,
+                                          text: _captionText,
                                         ),
-                                        const SizedBox(width: 6),
-                                        const Icon(Icons.edit,
-                                            size: 12, color: Colors.white70),
-                                      ],
-                                    ),
-                                  ),
-                                ),
+                                      )
+                                    : Align(
+                                        alignment: _captionPosition == 0
+                                            ? Alignment.topCenter
+                                            : Alignment.bottomCenter,
+                                        child: buildCaptionOverlay(
+                                          preset: _captionPreset,
+                                          text: _captionText,
+                                        ),
+                                      ),
                               ),
                             ],
                           ),
@@ -709,60 +720,25 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
                     ),
                   ),
 
-                  // 3RD COLUMN: EXTRACTED ASSETS SIDEBAR (190px wide)
-                  Container(
-                    width: 190,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      border: Border(left: BorderSide(color: VC.ink, width: 3)),
-                    ),
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text('ASSET', style: VT.mono(11, weight: FontWeight.w700)),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: VC.yellow,
-                                border: Border.all(color: VC.ink, width: 1.5),
-                              ),
-                              child: Text('${project.assets.length}', style: VT.mono(9, weight: FontWeight.w900)),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text('Klik untuk preview waktu', style: VT.mono(9, color: VC.muted)),
-                        const SizedBox(height: 12),
-                        
-                        // Extracted Assets List
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount: project.assets.length,
-                            itemBuilder: (ctx, i) {
-                              final a = project.assets[i];
-                              return _buildExtractedAssetTile(a);
-                            },
-                          ),
-                        ),
-
-                        const SizedBox(height: 10),
-                        // Button to full Asset Library
-                        SizedBox(
-                          width: double.infinity,
-                          child: BButton(
-                            label: 'ASSET LIBRARY',
-                            icon: Icons.perm_media,
-                            kind: BtnKind.outline,
-                            small: true,
-                            onTap: () => Navigator.of(context).pushNamed('/assets'),
-                          ),
-                        ),
-                      ],
-                    ),
+                  // 3RD COLUMN: CAPTION & REFRAME SIDEBAR (320px) — PRD-SPRINT-18
+                  CaptionReframePanel(
+                    projectId: widget.projectId,
+                    aspectRatio: _selectedAspectRatio == '9:16' ? 0 : 1,
+                    reframeMode: _reframeMode,
+                    captionPreset: _captionPreset,
+                    captionPosition: _captionPosition,
+                    activeWordIdx: _activeWordIdx,
+                    onAspectRatioChanged: (v) => setState(() {
+                      _selectedAspectRatio = v == 0 ? '9:16' : '1:1';
+                    }),
+                    onReframeModeChanged: (v) =>
+                        setState(() => _reframeMode = v),
+                    onCaptionPresetChanged: (v) =>
+                        setState(() => _captionPreset = v),
+                    onCaptionPositionChanged: (v) =>
+                        setState(() => _captionPosition = v),
+                    onActiveWordChanged: (v) =>
+                        setState(() => _activeWordIdx = v),
                   ),
                 ],
               ),
@@ -771,78 +747,6 @@ class _ClipEditorScreenState extends State<ClipEditorScreen> {
         ),
       );
     });
-  }
-
-  Widget _buildExtractedAssetTile(dynamic a) {
-    IconData icon = Icons.movie;
-    Color color = VC.blue;
-
-    if (a.type.toString().contains('hook')) {
-      icon = Icons.anchor;
-      color = VC.pink; // Pink
-    } else if (a.type.toString().contains('broll')) {
-      icon = Icons.image;
-      color = VC.blue; // Blue
-    } else if (a.type.toString().contains('soundBite')) {
-      icon = Icons.volume_up;
-      color = VC.green; // Green/Teal
-    } else if (a.type.toString().contains('ocrText')) {
-      icon = Icons.title;
-      color = VC.yellow; // Yellow
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Clickable(
-        onTap: () {
-          setState(() {
-            _playheadSec = a.start.toDouble();
-            _clipStartSec = a.start.toDouble();
-            _clipEndSec = a.end.toDouble();
-          });
-          showBrutalSnack(context, 'Seek ke ${a.title} [${fmtTime(a.start)} → ${fmtTime(a.end)}]');
-        },
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: VC.ink, width: 1.5),
-            boxShadow: VB.shadow(2),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: color,
-                  border: Border.all(color: VC.ink, width: 1.5),
-                ),
-                child: Icon(icon, size: 16, color: VC.ink),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      a.title,
-                      style: VT.body(10, weight: FontWeight.w700),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      '${fmtTime(a.start)} – ${fmtTime(a.end)}',
-                      style: VT.mono(8, color: VC.muted),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildClipCard({

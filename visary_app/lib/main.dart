@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'data/local/database.dart';
 import 'data/local/project_repository.dart';
 import 'screens/asset_library_screen.dart';
-import 'screens/caption_reframe_screen.dart';
 import 'screens/clip_editor_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/hook_finder_screen.dart';
@@ -72,10 +71,6 @@ class VisaryApp extends StatelessWidget {
           case '/hooks':
             return MaterialPageRoute(
               builder: (_) => HookFinderScreen(projectId: id ?? ''),
-            );
-          case '/caption-reframe':
-            return MaterialPageRoute(
-              builder: (_) => CaptionReframeScreen(projectId: id ?? ''),
             );
         }
         return null;

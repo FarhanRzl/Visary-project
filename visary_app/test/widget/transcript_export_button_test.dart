@@ -6,9 +6,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visary/models/models.dart';
 import 'package:visary/services/local_analyzer.dart';
 import 'package:visary/state/app_state.dart';
-import 'package:visary/screens/caption_reframe_screen.dart';
+import 'package:visary/widgets/caption_reframe_panel.dart';
 
 /// PRD-SPRINT-12 §4 — Test 12.2: Export transcript button visibility & state.
+/// Updated for PRD-SPRINT-18: tests CaptionReframePanel (sidebar widget)
+/// instead of deleted CaptionReframeScreen.
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -56,7 +58,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
   }
 
-  /// Scroll right panel sampai export section terlihat (ListView lazy build).
+  /// Scroll sidebar sampai export section terlihat (ListView lazy build).
   Future<void> _scrollToExport(WidgetTester tester) async {
     await tester.scrollUntilVisible(
       find.text('EXPORT TRANSCRIPT'),
@@ -66,8 +68,23 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Build panel with default callbacks (no-ops).
+  Widget _panel() => CaptionReframePanel(
+        projectId: 'p_test',
+        aspectRatio: 0,
+        reframeMode: 0,
+        captionPreset: 0,
+        captionPosition: 2,
+        activeWordIdx: 0,
+        onAspectRatioChanged: (_) {},
+        onReframeModeChanged: (_) {},
+        onCaptionPresetChanged: (_) {},
+        onCaptionPositionChanged: (_) {},
+        onActiveWordChanged: (_) {},
+      );
+
   testWidgets(
-      'Caption screen dengan transcript: tombol .SRT dan .TXT visible & enabled',
+      'Caption panel dengan transcript: tombol .SRT dan .TXT visible & enabled',
       (tester) async {
     _setDesktopSurface(tester);
     addTearDown(tester.view.reset);
@@ -84,10 +101,7 @@ void main() {
     );
 
     final state = _stateWithSignals(transcript: transcript);
-    await tester.pumpWidget(_wrap(
-      const CaptionReframeScreen(projectId: 'p_test'),
-      state,
-    ));
+    await tester.pumpWidget(_wrap(_panel(), state));
     await tester.pumpAndSettle();
 
     await _scrollToExport(tester);
@@ -98,16 +112,13 @@ void main() {
   });
 
   testWidgets(
-      'Caption screen tanpa transcript: pesan "Belum ada transcript" tampil',
+      'Caption panel tanpa transcript: pesan "Belum ada transcript" tampil',
       (tester) async {
     _setDesktopSurface(tester);
     addTearDown(tester.view.reset);
 
     final state = _stateWithSignals(transcript: null);
-    await tester.pumpWidget(_wrap(
-      const CaptionReframeScreen(projectId: 'p_test'),
-      state,
-    ));
+    await tester.pumpWidget(_wrap(_panel(), state));
     await tester.pumpAndSettle();
 
     await _scrollToExport(tester);
@@ -120,7 +131,7 @@ void main() {
   });
 
   testWidgets(
-      'Caption screen dengan transcript text-only (words kosong): .SRT disabled, .TXT enabled',
+      'Caption panel dengan transcript text-only (words kosong): .SRT disabled, .TXT enabled',
       (tester) async {
     _setDesktopSurface(tester);
     addTearDown(tester.view.reset);
@@ -132,10 +143,7 @@ void main() {
     );
 
     final state = _stateWithSignals(transcript: transcript);
-    await tester.pumpWidget(_wrap(
-      const CaptionReframeScreen(projectId: 'p_test'),
-      state,
-    ));
+    await tester.pumpWidget(_wrap(_panel(), state));
     await tester.pumpAndSettle();
 
     await _scrollToExport(tester);
