@@ -155,6 +155,85 @@ class Resequencer {
     return parts.isEmpty ? [ClipPart(0, fallbackDuration)] : parts;
   }
 
+  /// Build ClipParts from frame ranges + frame timestamps.
+  ///
+  /// New approach: each audio segment maps to a contiguous frame RANGE
+  /// (startFrame, endFrame). Visual segment boundaries come from the
+  /// timestamps of those frames, not equal-duration chunks or shot boundaries.
+  ///
+  /// [frameRanges] — list of (startFrameIdx, endFrameIdx) per audio segment.
+  /// [frameTimestamps] — timestamp of each extracted frame.
+  List<ClipPart> buildPartsWithFrameRanges({
+    required List<TranscriptSegment> segments,
+    required List<(int, int)> frameRanges,
+    required List<double> frameTimestamps,
+    required double videoDuration,
+    required double fallbackDuration,
+  }) {
+    if (segments.isEmpty || frameRanges.isEmpty || frameTimestamps.isEmpty) {
+      return [ClipPart(0, fallbackDuration)];
+    }
+
+    final parts = <ClipPart>[];
+
+    for (var i = 0; i < segments.length && i < frameRanges.length; i++) {
+      final audioDur = segments[i].duration;
+      if (audioDur <= 0) continue;
+
+      final (startIdx, endIdx) = frameRanges[i];
+      final startClamped = startIdx.clamp(0, frameTimestamps.length - 1);
+      final endClamped = endIdx.clamp(startClamped, frameTimestamps.length - 1);
+
+      // Visual segment: from startFrame timestamp to endFrame timestamp.
+      // Extend end to midpoint between endFrame and next frame (or video end).
+      double vStart = frameTimestamps[startClamped];
+      double vEnd;
+      if (endClamped < frameTimestamps.length - 1) {
+        // End = midpoint between this frame and next frame
+        vEnd = (frameTimestamps[endClamped] +
+                frameTimestamps[endClamped + 1]) /
+            2;
+      } else {
+        vEnd = videoDuration;
+      }
+
+      // Ensure non-zero duration
+      if (vEnd <= vStart) vEnd = vStart + 0.1;
+
+      final rawSpeed = (vEnd - vStart) / audioDur;
+      final speed = rawSpeed.clamp(0.25, 4.0);
+
+      parts.add(ClipPart(vStart, vEnd, speed));
+    }
+
+    return parts.isEmpty ? [ClipPart(0, fallbackDuration)] : parts;
+  }
+
+  /// Re-sequence clips using frame ranges.
+  List<Clip> resequenceWithFrameRanges({
+    required List<Clip> clips,
+    required List<TranscriptSegment> segments,
+    required List<(int, int)> frameRanges,
+    required List<double> frameTimestamps,
+    required double videoDuration,
+  }) {
+    if (segments.isEmpty || frameRanges.isEmpty) return clips;
+
+    return clips.map((clip) {
+      final newParts = buildPartsWithFrameRanges(
+        segments: segments,
+        frameRanges: frameRanges,
+        frameTimestamps: frameTimestamps,
+        videoDuration: videoDuration,
+        fallbackDuration: clip.duration,
+      );
+      return clip.copyWith(
+        parts: newParts,
+        type: ClipType.resequenced,
+      );
+    }).toList();
+  }
+
   /// Re-sequence semua clip dengan semantic segments. PRD-SPRINT-16 §2.4.
   /// Returns new clips list (does not mutate state).
   ///

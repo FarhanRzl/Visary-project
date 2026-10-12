@@ -706,58 +706,39 @@ class AppState extends ChangeNotifier {
       }
     }
 
-    List<int>? matchOrder;
+    // matchOrder no longer used — frameRanges replaces it (S18 redesign).
 
-    // ── Stage 1: Extract frames per shot ──
+    // ── Stage 1: Extract frames at fixed interval (every 2s) ──
+    // New approach: uniform sampling for content-based visual segmentation.
+    // More frames = finer visual granularity = better content matching.
     onProgress?.call('Extracting frames...');
     final framePaths = <String>[];
     final framesDir = Directory('${dir.path}/frames');
     if (!await framesDir.exists()) await framesDir.create(recursive: true);
 
-    // Shot midpoints: 1 frame per shot, timestamp = (shot[i] + shot[i+1]) / 2.
-    final shots = signals.shots;
+    // Sample 1 frame every 2 seconds for fine-grained visual analysis.
+    const frameInterval = 2.0; // seconds
     final frameTimestamps = <double>[];
-    if (shots.length > 1) {
-      for (var i = 0; i < shots.length - 1; i++) {
-        final mid = (shots[i] + shots[i + 1]) / 2;
-        frameTimestamps.add(mid);
-      }
-    } else {
-      // Fallback: extract frame per 3 detik.
-      for (double s = 1.5; s < videoDuration; s += 3) {
-        frameTimestamps.add(s);
-      }
+    for (double s = frameInterval / 2; s < videoDuration; s += frameInterval) {
+      frameTimestamps.add(s);
     }
 
-    // Limit max 20 frames (PRD §6 risk mitigation).
-    if (frameTimestamps.length > 20) {
-      // Subsample evenly.
-      final step = frameTimestamps.length / 20;
+    // Limit max 30 frames (API cost mitigation).
+    if (frameTimestamps.length > 30) {
+      final step = frameTimestamps.length / 30;
       final sampled = <double>[];
-      for (var i = 0; i < 20; i++) {
+      for (var i = 0; i < 30; i++) {
         sampled.add(frameTimestamps[(i * step).floor()]);
       }
       frameTimestamps.clear();
       frameTimestamps.addAll(sampled);
     }
 
-    // Build video segment boundaries from frame timestamps.
-    // Each frame i represents a visual segment. Segment boundaries:
-    // boundary[0] = 0 (start of video)
-    // boundary[i] = midpoint between frameTimestamps[i-1] and frameTimestamps[i]
-    // boundary[N] = videoDuration
-    // So segment i spans [boundary[i], boundary[i+1]] — the visual region
-    // that frame i was sampled from.
-    final videoSegmentTimestamps = <double>[0.0];
-    for (var i = 1; i < frameTimestamps.length; i++) {
-      videoSegmentTimestamps.add(
-        (frameTimestamps[i - 1] + frameTimestamps[i]) / 2,
-      );
-    }
-    videoSegmentTimestamps.add(videoDuration);
+    debugPrint('[S18] Extracting ${frameTimestamps.length} frames '
+        'at ${frameInterval}s interval');
 
     for (var i = 0; i < frameTimestamps.length; i++) {
-      final outPath = '${framesDir.path}/shot_$i.jpg';
+      final outPath = '${framesDir.path}/frame_$i.jpg';
       try {
         await VideoService.extractFrame(
           sourcePath: p.filePath,
@@ -766,83 +747,89 @@ class AppState extends ChangeNotifier {
         );
         framePaths.add(outPath);
       } catch (e) {
-        debugPrint('[S14] frame extraction gagal untuk shot $i: $e');
+        debugPrint('[S18] frame extraction gagal untuk frame $i: $e');
       }
     }
 
     if (framePaths.isEmpty) {
-      // Fallback: timing-based resequence.
-      debugPrint('[S14] tidak ada frame → fallback timing-based');
+      debugPrint('[S18] tidak ada frame → fallback timing-based');
       resequenceClips(projectId);
       notifyListeners();
       return [];
     }
 
     // ── Stage 2: Describe frames via VLM ──
-    onProgress?.call('Analyzing visuals...');
+    onProgress?.call('Analyzing visuals (${framePaths.length} frames)...');
     List<String> visualDescriptions;
     try {
       visualDescriptions = await matcher.describeFrames(framePaths: framePaths);
     } catch (e) {
-      debugPrint('[S14] describeFrames gagal: $e → fallback timing-based');
+      debugPrint('[S18] describeFrames gagal: $e → fallback timing-based');
       resequenceClips(projectId);
       notifyListeners();
       return [];
     }
 
     // ── Stage 3: Semantic segmentation (S16) ──
-    // S16: 1 LLM call splits transcript into N segments = shot count.
-    // Fallback: detectCutPoints (S13 timing) → cutPointsToSegments.
-    final shotCount = frameTimestamps.length;
+    // Number of segments = independent of frame count.
+    // Use shot count as rough target, or derive from video duration.
+    final segTarget = signals.shots.length > 1
+        ? signals.shots.length - 1
+        : (videoDuration / 6).ceil().clamp(2, 15); // ~6s per segment
     List<TranscriptSegment> segments;
     // ignore: unnecessary_null_comparison
     if (hasTranscript && t != null) {
       onProgress?.call('Segmenting transcript by context...');
       segments = await matcher.segmentByContext(
         transcript: t,
-        targetSegments: shotCount,
+        targetSegments: segTarget,
       );
       if (segments.isEmpty) {
-        // Fallback: S13 timing-based cut points.
-        debugPrint('[S16] semantic segment gagal → fallback timing');
+        debugPrint('[S18] semantic segment gagal → fallback timing');
         final cutPoints = _resequencer.detectCutPoints(t.words);
         segments = _resequencer.cutPointsToSegments(cutPoints, t.words);
       }
     } else {
-      // Visual-only: no transcript → sequential segments.
       onProgress?.call('Visual-only matching (no transcript)...');
-      debugPrint('[S16] no transcript → visual-only sequential segments');
-      segments = _resequencer.sequentialSegments(shotCount, videoDuration);
+      debugPrint('[S18] no transcript → visual-only sequential segments');
+      segments = _resequencer.sequentialSegments(segTarget, videoDuration);
     }
 
-    // ── Stage 4: Match content via LLM ──
-    onProgress?.call('Matching content...');
+    // ── Stage 4: Match content via LLM — frame RANGES per topic ──
+    // New: LLM finds contiguous frame range per audio topic.
+    // Visual persists until audio topic changes.
+    onProgress?.call('Matching content (frame ranges)...');
+    List<(int, int)> frameRanges;
     try {
-      matchOrder = await matcher.matchContent(
+      frameRanges = await matcher.matchContentRanges(
         visualDescriptions: visualDescriptions,
         segments: segments,
       );
     } catch (e) {
-      debugPrint('[S16] matchContent gagal: $e → fallback sequential');
-      matchOrder = List.generate(segments.length, (i) => i);
+      debugPrint('[S18] matchContentRanges gagal: $e → fallback even split');
+      frameRanges = matcher.fallbackRanges(
+          visualDescriptions.length, segments.length);
     }
 
-    // ── Stage 5: Resequence with segments + matchOrder ──
+    debugPrint('[S18] Frame ranges: $frameRanges');
+
+    // ── Stage 5: Resequence with frame ranges + timestamps ──
     onProgress?.call('Re-sequencing clips...');
-    if (segments.isNotEmpty) {
-      final newClips = _resequencer.resequenceWithSegments(
+    if (segments.isNotEmpty && frameRanges.isNotEmpty) {
+      final newClips = _resequencer.resequenceWithFrameRanges(
         clips: p.clips,
         segments: segments,
+        frameRanges: frameRanges,
+        frameTimestamps: frameTimestamps,
         videoDuration: videoDuration,
-        matchOrder: matchOrder,
-        videoSegmentTimestamps: videoSegmentTimestamps,
       );
       _put(p.copyWith(clips: newClips));
     }
     notifyListeners();
 
     onProgress?.call('Done');
-    return matchOrder;
+    // Return a flat match order for compatibility with callers that expect it.
+    return frameRanges.map((r) => r.$1).toList();
   }
 
   // ─────────────────── B-ROLL RECOMMENDATION (PRD-SPRINT-05) ──────────────

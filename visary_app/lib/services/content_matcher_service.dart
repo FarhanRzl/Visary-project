@@ -62,8 +62,16 @@ class ContentMatcherService {
       }
       return descriptions;
     } catch (e) {
-      debugPrint('[ContentMatcher] batch describeFrames gagal: $e → per-frame fallback');
-      // Fallback: per-frame (lama, boras quota).
+      final msg = e.toString();
+      final transient = msg.contains('503') || msg.contains('429');
+      if (transient) {
+        // Gemini overload/quota — per-frame akan gagal juga.
+        // Return empty descriptions, pipeline lanjut dengan visual-only fallback.
+        debugPrint('[ContentMatcher] batch gagal (transient): $e → skip per-frame, visual-only');
+        return List.generate(framePaths.length, (_) => '');
+      }
+      // Non-transient error (400, dll) → coba per-frame (mungkin batch terlalu besar).
+      debugPrint('[ContentMatcher] batch gagal: $e → per-frame fallback');
       final descriptions = <String>[];
       for (var i = 0; i < framePaths.length; i++) {
         if (b64List[i].isEmpty) {
@@ -347,6 +355,113 @@ class ContentMatcherService {
       debugPrint('[ContentMatcher] parse JSON gagal: $e → fallback sequential');
       return List.generate(expectedLength, (i) => i);
     }
+  }
+
+  /// Match audio segments to visual frame RANGES via LLM.
+  ///
+  /// New approach (PRD-SPRINT-18 content matching redesign):
+  /// Instead of matching 1 frame index per audio segment, find a CONTIGUOUS
+  /// RANGE of frames per audio topic. Visual persists until audio topic changes.
+  ///
+  /// Returns list of (startFrameIdx, endFrameIdx) per audio segment.
+  /// Each range maps to actual frame timestamps → visual segment boundaries.
+  Future<List<(int, int)>> matchContentRanges({
+    required List<String> visualDescriptions,
+    required List<TranscriptSegment> segments,
+  }) async {
+    if (segments.isEmpty || visualDescriptions.isEmpty) {
+      return List.generate(
+          segments.length, (i) => (0, visualDescriptions.length - 1 < 0 ? 0 : 0));
+    }
+
+    final prompt = _buildRangeMatchPrompt(visualDescriptions, segments);
+    String response;
+    try {
+      response = await _ai.sendPrompt(prompt: prompt);
+    } catch (e) {
+      debugPrint('[ContentMatcher] matchContentRanges LLM call gagal: $e');
+      // Fallback: distribute frames evenly across segments.
+      return fallbackRanges(visualDescriptions.length, segments.length);
+    }
+
+    return _parseRangeResponse(
+        response, segments.length, visualDescriptions.length);
+  }
+
+  /// Build prompt for range-based matching.
+  String _buildRangeMatchPrompt(
+      List<String> visualDescriptions, List<TranscriptSegment> segments) {
+    final buf = StringBuffer();
+    buf.writeln('You are a content matching engine.');
+    buf.writeln();
+    buf.writeln('Audio segments (in order):');
+    for (var i = 0; i < segments.length; i++) {
+      buf.writeln('${i + 1}. Topic: "${segments[i].topic}" '
+          '(audio: ${segments[i].duration.toStringAsFixed(1)}s)');
+    }
+    buf.writeln();
+    buf.writeln('Visual frames (sampled from video, in chronological order):');
+    for (var i = 0; i < visualDescriptions.length; i++) {
+      buf.writeln('$i. "${visualDescriptions[i]}"');
+    }
+    buf.writeln();
+    buf.writeln('For each audio segment, find the CONTIGUOUS range of visual '
+        'frames that best shows its topic.');
+    buf.writeln('The visual should persist until the audio topic changes.');
+    buf.writeln('All frames must be covered (no gaps, no overlaps).');
+    buf.writeln();
+    buf.writeln('Return ONLY a JSON array of [startFrame, endFrame] pairs '
+        '(0-based, inclusive).');
+    buf.writeln('Example: [[0,2], [3,5], [6,9]]');
+    buf.writeln('Length must equal ${segments.length}.');
+    return buf.toString();
+  }
+
+  /// Parse range response → List<(int, int)>.
+  List<(int, int)> _parseRangeResponse(
+    String response,
+    int expectedLength,
+    int frameCount,
+  ) {
+    try {
+      final arrayMatch = RegExp(r'\[[\s\S]*\]').firstMatch(response);
+      if (arrayMatch == null) {
+        return fallbackRanges(frameCount, expectedLength);
+      }
+      final parsed = jsonDecode(arrayMatch.group(0)!) as List;
+      final ranges = <(int, int)>[];
+      for (final e in parsed) {
+        if (e is List && e.length >= 2) {
+          final start = (e[0] as num).toInt().clamp(0, frameCount - 1);
+          final end = (e[1] as num).toInt().clamp(start, frameCount - 1);
+          ranges.add((start, end));
+        }
+      }
+      if (ranges.length != expectedLength) {
+        return fallbackRanges(frameCount, expectedLength);
+      }
+      return ranges;
+    } catch (e) {
+      debugPrint('[ContentMatcher] parse ranges gagal: $e → fallback');
+      return fallbackRanges(frameCount, expectedLength);
+    }
+  }
+
+  /// Fallback: distribute frames evenly across segments.
+  /// Public for use by AppState when matchContentRanges throws.
+  List<(int, int)> fallbackRanges(int frameCount, int segCount) {
+    if (frameCount <= 0 || segCount <= 0) return [];
+    final perSeg = frameCount ~/ segCount;
+    final ranges = <(int, int)>[];
+    var start = 0;
+    for (var i = 0; i < segCount; i++) {
+      var end = start + perSeg - 1;
+      if (i == segCount - 1) end = frameCount - 1; // last gets remainder
+      end = end.clamp(start, frameCount - 1);
+      ranges.add((start, end));
+      start = end + 1;
+    }
+    return ranges;
   }
 
   /// Convert index 0-based ke huruf (0 → A, 1 → B, ...).
