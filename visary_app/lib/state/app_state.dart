@@ -51,6 +51,7 @@ class AppState extends ChangeNotifier {
   String customApiKey = '';
   String customBaseUrl = '';
   String customModel = 'gpt-4o-mini';
+  bool autoSwitchEnabled = false;
 
   bool get isByokActive => byokEnabled && activeAiProvider != AiProviderType.server;
 
@@ -74,6 +75,7 @@ class AppState extends ChangeNotifier {
     customApiKey = (await aiService.storage.getCustomKey()) ?? '';
     customBaseUrl = (await aiService.storage.getCustomBaseUrl()) ?? '';
     customModel = (await aiService.storage.getCustomModel()) ?? 'gpt-4o-mini';
+    autoSwitchEnabled = await aiService.storage.getAutoSwitch();
     notifyListeners();
   }
 
@@ -109,6 +111,7 @@ class AppState extends ChangeNotifier {
     if (customModel != null) {
       await aiService.storage.saveCustomModel(this.customModel);
     }
+    await aiService.storage.setAutoSwitch(autoSwitchEnabled);
 
     notifyListeners();
   }
@@ -692,13 +695,15 @@ class AppState extends ChangeNotifier {
     final dir = await _workDir(projectId);
     final matcher = ContentMatcherService(aiService);
 
-    // ── Cek provider: Groq/Server tidak support vision ──
-    final provider = await aiService.storage.getActiveProvider();
+    // ── Cek provider untuk vision (PRD-SPRINT-17: auto-switch aware) ──
     final byokActive = await aiService.isByokActive();
-    if (byokActive &&
-        (provider == AiProviderType.groq || provider == AiProviderType.server)) {
-      throw UnsupportedError(
-          'Vision API butuh Gemini atau OpenAI. Switch provider di Settings.');
+    if (byokActive) {
+      final visionProvider =
+          await aiService.getProviderForTask(TaskType.vision);
+      if (visionProvider == AiProviderType.server) {
+        throw UnsupportedError(
+            'Vision API butuh Gemini atau OpenAI key. Isi di Settings.');
+      }
     }
 
     List<int>? matchOrder;

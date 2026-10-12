@@ -297,19 +297,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                DropdownButton<AiProviderType>(
-                  value: state.activeAiProvider,
-                  isExpanded: true,
-                  onChanged: (AiProviderType? val) {
-                    if (val != null) _updateProviderSettings(state, provider: val);
-                  },
-                  items: AiProviderType.values
-                      .map((p) => DropdownMenuItem(
-                            value: p,
-                            child: Text(p.displayName, style: VT.body(14)),
-                          ))
-                      .toList(),
+                // Auto-Switch toggle (PRD-SPRINT-17).
+                Row(
+                  children: [
+                    Text('AUTO-SWITCH PROVIDER', style: VT.body(14)),
+                    const Spacer(),
+                    Switch(
+                      value: state.autoSwitchEnabled,
+                      activeTrackColor: VC.blue,
+                      onChanged: state.byokEnabled
+                          ? (v) => _updateAutoSwitch(state, enabled: v)
+                          : null,
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 12),
+                if (state.autoSwitchEnabled && state.byokEnabled) ...[
+                  // Info + badges saat Auto-Switch ON.
+                  Text(
+                    'ASR \u2192 Groq (Whisper) | Vision+LLM \u2192 Gemini',
+                    style: VT.mono(11, color: VC.muted),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildProviderBadges(state),
+                ] else ...[
+                  // Dropdown provider (existing behavior saat Auto-Switch OFF).
+                  DropdownButton<AiProviderType>(
+                    value: state.activeAiProvider,
+                    isExpanded: true,
+                    onChanged: (AiProviderType? val) {
+                      if (val != null) _updateProviderSettings(state, provider: val);
+                    },
+                    items: AiProviderType.values
+                        .map((p) => DropdownMenuItem(
+                              value: p,
+                              child: Text(p.displayName, style: VT.body(14)),
+                            ))
+                        .toList(),
+                  ),
+                ],
               ],
             ),
           ),
@@ -538,6 +564,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
       enabled: enabled ?? state.byokEnabled,
       provider: provider ?? state.activeAiProvider,
     );
+  }
+
+  /// Toggle Auto-Switch provider (PRD-SPRINT-17).
+  void _updateAutoSwitch(AppState state, {required bool enabled}) {
+    state.autoSwitchEnabled = enabled;
+    state.saveAiSettings(
+      enabled: state.byokEnabled,
+      provider: state.activeAiProvider,
+    );
+  }
+
+  /// Provider status badges saat Auto-Switch ON (PRD-SPRINT-17 §2.8).
+  Widget _buildProviderBadges(AppState state) {
+    return FutureBuilder<List<(String, String, bool)>>(
+      future: _resolveTaskProviders(state),
+      builder: (ctx, snap) {
+        final badges = snap.data ?? [];
+        return Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: badges.map((b) {
+            final (task, providerName, ok) = b;
+            return BTag(
+              '$task: $providerName ${ok ? "\u2713" : "\u26a0"}',
+              color: ok ? VC.green : VC.pink,
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  /// Resolve provider per task untuk badge display.
+  Future<List<(String, String, bool)>> _resolveTaskProviders(AppState state) async {
+    final ai = state.aiService;
+    final results = <(String, String, bool)>[];
+
+    for (final entry in [
+      ('ASR', TaskType.asr),
+      ('Vision', TaskType.vision),
+      ('LLM', TaskType.llm),
+    ]) {
+      final (label, task) = entry;
+      final provider = await ai.getProviderForTask(task);
+      final ok = provider != AiProviderType.server;
+      results.add((label, provider.displayName, ok));
+    }
+
+    return results;
   }
 
   Widget _quotaPanel(user) {

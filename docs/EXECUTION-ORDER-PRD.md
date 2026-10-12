@@ -53,6 +53,7 @@ S01 Core Stability ──► S02 Persistence ──► S03 Analyzer/FFmpeg ─�
 | S14 | S06, S11, S13 | Content-aware match butuh vision API (S06) + transcript (S11) + resequencer (S13) — **done** |
 | S15 | S11, S13, S14 | ASR & matching bug fixes butuh ASR pipeline (S11) + resequencer (S13) + content matcher (S14) |
 | S16 | S11, S14, S15 | Semantic segmentation redesign butuh ASR (S11) + content matcher base (S14) + ASR fixes (S15) |
+| S17 | S06, S11, S14, S16 | Auto-switch provider butuh BYOK (S06) + ASR (S11) + content matching (S14) + semantic matching (S16) |
 
 Catatan: S05 bernomar lebih kecil dari S06, tapi **S06 harus jalan duluan** karena S05 memakai `AiProviderService` yang dibuat di S06. Keduanya sekarang done di kode.
 
@@ -77,6 +78,7 @@ Catatan: S05 bernomar lebih kecil dari S06, tapi **S06 harus jalan duluan** kare
 | **S14** Content-Aware Match | ✅ Selesai | PRD `PRD-SPRINT-14-CONTENT-AWARE-MATCHING.md`. Vision API (`visionPrompt` — Gemini inline_data + OpenAI image_url + Custom, Groq/Server → UnsupportedError) + frame extraction per shot (`extractFrame`) + `ContentMatcherService` (describeFrames/extractTopics/matchContent, JSON parse + fallback sequential) + `Resequencer.buildParts(matchOrder)` + `AppState.contentAwareResequence()` pipeline (multi-stage fallback ke S13) + AudioPanel MATCH CONTENT button. |
 | **S15** ASR & Matching Fixes |  Draft | PRD `PRD-SPRINT-15-ASR-MATCHING-FIXES.md`. Bug fixes: ASR silent failure (throw + retry 502/503), base64 newline bug (Gemini 400), transcript persist (Drift v4), ClipPart.speed persist, visual-only matching fallback (tanpa transcript), audio chunking >20MB, error display di upload screen. |
 | **S16** Semantic Matching |  Draft | PRD `PRD-SPRINT-16-SEMANTIC-MATCHING.md`. Redesign: LLM semantic segmentation (1 call, N segments = shot count) menggantikan timing-based cut + per-segment extractTopics. API calls 2N+1 → N+2. TranscriptSegment model. Fallback ke S13 timing. Gemini timestamp warning. |
+| **S17** Auto-Switch Provider |  Draft | PRD `PRD-SPRINT-17-AUTO-SWITCH-PROVIDER.md`. BYOK routing per task: ASR→Groq (Whisper, word-level timestamps), Vision+LLM→Gemini. Auto-switch toggle, provider status badges, fallback chain. Backward compat dengan single provider mode. |
 | **S07** UI Fidelity | ⏸️ Belum | `design/DESIGN-SPEC.md` + 8 design screen reference ada. Belum ada alignment work. |
 | **Gate G1** | ⏸️ Belum | Validasi Windows 11 belum dijalankan. |
 

@@ -18,6 +18,13 @@ enum AiProviderType {
   final String displayName;
 }
 
+/// Jenis task AI yang butuh provider routing berbeda (PRD-SPRINT-17).
+enum TaskType {
+  asr, // Transcribe audio → text + word timestamps
+  vision, // Describe image/frame → text
+  llm, // Text inference (segment, match, summary)
+}
+
 /// Hasil verifikasi koneksi API key.
 class ConnectionTestResult {
   const ConnectionTestResult({
@@ -47,6 +54,7 @@ class SecureKeyStorage {
   static const keyGroq = 'byok_groq_api_key';
   static const keyByokEnabled = 'byok_enabled';
   static const keyActiveProvider = 'byok_active_provider';
+  static const keyAutoSwitch = 'byok_auto_switch';
 
   Future<void> write(String key, String value) => _storage.write(key: key, value: value);
 
@@ -93,6 +101,16 @@ class SecureKeyStorage {
       (e) => e.name == v,
       orElse: () => AiProviderType.server,
     );
+  }
+
+  // ── Auto-Switch Provider (PRD-SPRINT-17) ──
+
+  Future<void> setAutoSwitch(bool enabled) =>
+      write(keyAutoSwitch, enabled.toString());
+
+  Future<bool> getAutoSwitch() async {
+    final v = await read(keyAutoSwitch);
+    return v == 'true';
   }
 }
 
@@ -288,6 +306,70 @@ class AiProviderService {
     }
   }
 
+  // ── Auto-Switch Provider Routing (PRD-SPRINT-17) ──
+
+  /// Cek apakah key tersedia untuk provider tertentu.
+  Future<bool> hasKeyFor(AiProviderType provider) async {
+    switch (provider) {
+      case AiProviderType.gemini:
+        final k = await storage.getGeminiKey();
+        return k != null && k.trim().isNotEmpty;
+      case AiProviderType.openai:
+        final k = await storage.getOpenAiKey();
+        return k != null && k.trim().isNotEmpty;
+      case AiProviderType.groq:
+        final k = await storage.getGroqKey();
+        return k != null && k.trim().isNotEmpty;
+      case AiProviderType.custom:
+        final k = await storage.getCustomKey();
+        final b = await storage.getCustomBaseUrl();
+        return k != null &&
+            k.trim().isNotEmpty &&
+            b != null &&
+            b.trim().isNotEmpty;
+      case AiProviderType.server:
+        return false;
+    }
+  }
+
+  /// Resolve provider optimal untuk task tertentu (PRD-SPRINT-17 §2.1).
+  ///
+  /// Bila Auto-Switch ON: route berdasarkan key availability + capability.
+  /// Bila OFF: return activeAiProvider (existing behavior).
+  Future<AiProviderType> getProviderForTask(TaskType task) async {
+    final autoSwitch = await storage.getAutoSwitch();
+    if (!autoSwitch) {
+      return storage.getActiveProvider();
+    }
+
+    final hasGroq = await hasKeyFor(AiProviderType.groq);
+    final hasGemini = await hasKeyFor(AiProviderType.gemini);
+    final hasOpenAi = await hasKeyFor(AiProviderType.openai);
+    final hasCustom = await hasKeyFor(AiProviderType.custom);
+
+    switch (task) {
+      case TaskType.asr:
+        // Prefer Groq (Whisper, word-level timestamps, free).
+        if (hasGroq) return AiProviderType.groq;
+        if (hasGemini) return AiProviderType.gemini; // fallback (estimasi)
+        if (hasOpenAi) return AiProviderType.openai;
+        return AiProviderType.server;
+      case TaskType.vision:
+        // Prefer Gemini (free vision API).
+        if (hasGemini) return AiProviderType.gemini;
+        if (hasOpenAi) return AiProviderType.openai;
+        if (hasCustom) return AiProviderType.custom;
+        return AiProviderType.server;
+      case TaskType.llm:
+        // Prefer Gemini (free, capable).
+        if (hasGemini) return AiProviderType.gemini;
+        if (hasOpenAi) return AiProviderType.openai;
+        if (hasGroq) return AiProviderType.groq;
+        if (hasCustom) return AiProviderType.custom;
+        return AiProviderType.server;
+    }
+  }
+
   /// Direct prompt inference via active provider (Gemini / OpenAI / Groq / Server)
   Future<String> sendPrompt({
     required String prompt,
@@ -300,7 +382,11 @@ class AiProviderService {
       return 'Hasil inferensi Server Visary: $prompt';
     }
 
-    final provider = await storage.getActiveProvider();
+    // PRD-SPRINT-17: Auto-Switch routes LLM to optimal provider.
+    final provider = await getProviderForTask(TaskType.llm);
+    if (provider == AiProviderType.server) {
+      return 'Hasil inferensi Server Visary: $prompt';
+    }
     switch (provider) {
       case AiProviderType.gemini:
         final key = (await storage.getGeminiKey()) ?? '';
@@ -411,7 +497,12 @@ class AiProviderService {
     final active = await isByokActive();
     if (!active) throw StateError('BYOK tidak aktif');
 
-    final provider = await storage.getActiveProvider();
+    // PRD-SPRINT-17: Auto-Switch routes vision to optimal provider.
+    final provider = await getProviderForTask(TaskType.vision);
+    if (provider == AiProviderType.server) {
+      throw UnsupportedError(
+          'Vision API butuh Gemini atau OpenAI key. Isi di Settings.');
+    }
     switch (provider) {
       case AiProviderType.gemini:
         final key = (await storage.getGeminiKey()) ?? '';
@@ -545,9 +636,14 @@ class AiProviderService {
       return const Transcript(
           fullText: '', words: [], language: null, provider: 'server');
     }
-    final provider = await storage.getActiveProvider();
+    // PRD-SPRINT-17: Auto-Switch routes ASR to optimal provider.
+    final provider = await getProviderForTask(TaskType.asr);
     if (provider == AiProviderType.gemini) {
       return await _transcribeViaGemini(audioFilePath, language);
+    }
+    if (provider == AiProviderType.server) {
+      return const Transcript(
+          fullText: '', words: [], language: null, provider: 'server');
     }
 
     final (base, key, model) = await _asrEndpoint(provider);

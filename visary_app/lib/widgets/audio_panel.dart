@@ -100,14 +100,31 @@ class _AudioPanelState extends State<AudioPanel> {
   /// Transkripsi audio pengganti → re-sequence clips. PRD-SPRINT-13.
   Future<void> _transcribeAudio() async {
     final state = context.read<AppState>();
-    // Gemini timestamp warning (PRD-SPRINT-16 §2.5).
-    // Gemini tidak punya word-level timestamps → estimasi kurang presisi.
-    final provider = await state.aiService.storage.getActiveProvider();
-    if (provider == AiProviderType.gemini && mounted) {
-      showBrutalSnack(context,
-          'Estimasi timestamp (Gemini) — kurang presisi. '
-          'Untuk word-level akurat, gunakan OpenAI/Groq/Custom (Whisper) di Settings.',
-          color: VC.yellow);
+    // PRD-SPRINT-17: info snackbar based on routing.
+    if (state.autoSwitchEnabled) {
+      // Auto-Switch ON: ASR routes to Groq (Whisper) if key available.
+      final asrProvider = await state.aiService.getProviderForTask(TaskType.asr);
+      if (mounted) {
+        if (asrProvider == AiProviderType.groq) {
+          showBrutalSnack(context,
+              'ASR via Groq (Whisper) \u2014 word-level timestamps.',
+              color: VC.green);
+        } else if (asrProvider == AiProviderType.gemini) {
+          showBrutalSnack(context,
+              'ASR via Gemini \u2014 estimasi timestamp (kurang presisi). '
+              'Isi Groq key di Settings untuk word-level akurat.',
+              color: VC.yellow);
+        }
+      }
+    } else {
+      // Auto-Switch OFF: existing Gemini warning logic.
+      final provider = await state.aiService.storage.getActiveProvider();
+      if (provider == AiProviderType.gemini && mounted) {
+        showBrutalSnack(context,
+            'Estimasi timestamp (Gemini) \u2014 kurang presisi. '
+            'Untuk word-level akurat, gunakan OpenAI/Groq/Custom (Whisper) di Settings.',
+            color: VC.yellow);
+      }
     }
     setState(() => _isTranscribing = true);
     try {
