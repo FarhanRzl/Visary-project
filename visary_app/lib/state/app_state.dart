@@ -11,6 +11,7 @@ import '../models/models.dart';
 import '../services/ai_provider_service.dart';
 import '../services/ai_service.dart';
 import '../services/content_matcher_service.dart';
+import '../services/frame_description_cache.dart';
 import '../services/local_analyzer.dart';
 import '../services/resequence_service.dart';
 import '../services/video_service.dart' show VideoService, FfmpegMissingException, BrollOverlay;
@@ -758,16 +759,60 @@ class AppState extends ChangeNotifier {
       return [];
     }
 
-    // ── Stage 2: Describe frames via VLM ──
+    // ── Stage 2: Describe frames via VLM (with cache) ──
+    // S18 P4: Cache frame descriptions to avoid redundant API calls.
+    // Cache key: videoPath + videoSize + frameTimestamps + model + promptVersion.
+    // Re-running match content with same video (no audio change) → 0 VLM API calls.
     onProgress?.call('Analyzing visuals (${framePaths.length} frames)...');
-    List<String> visualDescriptions;
+    final frameCache = FrameDescriptionCache(workspaceDir: storage.root);
+
+    // Get video file size for cache key
+    int videoSize = 0;
     try {
-      visualDescriptions = await matcher.describeFrames(framePaths: framePaths);
-    } catch (e) {
-      debugPrint('[S18] describeFrames gagal: $e → fallback timing-based');
-      resequenceClips(projectId);
-      notifyListeners();
-      return [];
+      videoSize = await File(p.filePath).length();
+    } catch (_) {}
+
+    // Determine current vision model for cache key
+    final visionProvider = byokActive
+        ? await aiService.getProviderForTask(TaskType.vision)
+        : AiProviderType.server;
+    final visionModel = visionProvider == AiProviderType.gemini
+        ? 'gemini-flash-latest'
+        : visionProvider.toString();
+
+    // Check cache
+    final cached = await frameCache.get(
+      projectId: projectId,
+      videoPath: p.filePath,
+      videoSize: videoSize,
+      frameTimestamps: frameTimestamps,
+      model: visionModel,
+      promptVersion: FrameDescriptionCache.promptVersion,
+    );
+
+    List<String> visualDescriptions;
+    if (cached != null) {
+      visualDescriptions = cached;
+      debugPrint('[S18] Frame descriptions from cache (${cached.length} frames)');
+    } else {
+      try {
+        visualDescriptions = await matcher.describeFrames(framePaths: framePaths);
+        // Store in cache
+        await frameCache.put(
+          projectId: projectId,
+          videoPath: p.filePath,
+          videoSize: videoSize,
+          frameTimestamps: frameTimestamps,
+          model: visionModel,
+          promptVersion: FrameDescriptionCache.promptVersion,
+          descriptions: visualDescriptions,
+        );
+      } catch (e) {
+        debugPrint('[S18] describeFrames gagal: $e → fallback timing-based');
+        resequenceClips(projectId);
+        notifyListeners();
+        return [];
+      }
     }
 
     // ── Stage 3: Semantic segmentation (S16) ──
