@@ -741,6 +741,21 @@ class AppState extends ChangeNotifier {
       frameTimestamps.addAll(sampled);
     }
 
+    // Build video segment boundaries from frame timestamps.
+    // Each frame i represents a visual segment. Segment boundaries:
+    // boundary[0] = 0 (start of video)
+    // boundary[i] = midpoint between frameTimestamps[i-1] and frameTimestamps[i]
+    // boundary[N] = videoDuration
+    // So segment i spans [boundary[i], boundary[i+1]] — the visual region
+    // that frame i was sampled from.
+    final videoSegmentTimestamps = <double>[0.0];
+    for (var i = 1; i < frameTimestamps.length; i++) {
+      videoSegmentTimestamps.add(
+        (frameTimestamps[i - 1] + frameTimestamps[i]) / 2,
+      );
+    }
+    videoSegmentTimestamps.add(videoDuration);
+
     for (var i = 0; i < frameTimestamps.length; i++) {
       final outPath = '${framesDir.path}/shot_$i.jpg';
       try {
@@ -820,6 +835,7 @@ class AppState extends ChangeNotifier {
         segments: segments,
         videoDuration: videoDuration,
         matchOrder: matchOrder,
+        videoSegmentTimestamps: videoSegmentTimestamps,
       );
       _put(p.copyWith(clips: newClips));
     }

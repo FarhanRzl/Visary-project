@@ -105,18 +105,23 @@ class Resequencer {
   ///
   /// Setiap segmen punya: audio duration (segment.duration), video segment
   /// index (matchOrder[i]), speed-adjust clamp 0.25x–4x.
+  ///
+  /// [videoSegmentTimestamps] — batas waktu shot boundary asli dari
+  /// signals.shots (atau fallback 3s). Index 0 = awal video, last = durasi.
+  /// matchOrder[i] memetakan audio segment i → video segment index pada
+  /// timestamps ini. Bila null → pakai equal-duration fallback (legacy).
   List<ClipPart> buildPartsWithSegments({
     required List<TranscriptSegment> segments,
     required double videoDuration,
     required double fallbackDuration,
     List<int>? matchOrder,
+    List<double>? videoSegmentTimestamps,
   }) {
     if (segments.isEmpty || videoDuration <= 0) {
       return [ClipPart(0, fallbackDuration)];
     }
 
     final numSegs = segments.length;
-    final videoSegDur = videoDuration / numSegs;
     final parts = <ClipPart>[];
 
     for (var i = 0; i < numSegs; i++) {
@@ -126,10 +131,22 @@ class Resequencer {
       final segIdx = (matchOrder != null && i < matchOrder.length)
           ? matchOrder[i]
           : i;
-      final vStart = segIdx * videoSegDur;
-      final vEnd = (segIdx + 1) * videoSegDur;
 
-      final rawSpeed = videoSegDur / audioDur;
+      // Video segment start/end: pakai shot boundary timestamps bila tersedia,
+      // fallback ke equal-duration chunk.
+      double vStart, vEnd;
+      if (videoSegmentTimestamps != null &&
+          videoSegmentTimestamps.length > 1 &&
+          segIdx < videoSegmentTimestamps.length - 1) {
+        vStart = videoSegmentTimestamps[segIdx];
+        vEnd = videoSegmentTimestamps[segIdx + 1];
+      } else {
+        final videoSegDur = videoDuration / numSegs;
+        vStart = segIdx * videoSegDur;
+        vEnd = (segIdx + 1) * videoSegDur;
+      }
+
+      final rawSpeed = (vEnd - vStart) / audioDur;
       final speed = rawSpeed.clamp(0.25, 4.0);
 
       parts.add(ClipPart(vStart, vEnd, speed));
@@ -140,11 +157,15 @@ class Resequencer {
 
   /// Re-sequence semua clip dengan semantic segments. PRD-SPRINT-16 §2.4.
   /// Returns new clips list (does not mutate state).
+  ///
+  /// [videoSegmentTimestamps] — shot boundary timestamps asli. Dipass ke
+  /// buildPartsWithSegments agar matchOrder index map ke shot asli.
   List<Clip> resequenceWithSegments({
     required List<Clip> clips,
     required List<TranscriptSegment> segments,
     required double videoDuration,
     List<int>? matchOrder,
+    List<double>? videoSegmentTimestamps,
   }) {
     if (segments.isEmpty) return clips;
 
@@ -154,6 +175,7 @@ class Resequencer {
         videoDuration: videoDuration,
         fallbackDuration: clip.duration,
         matchOrder: matchOrder,
+        videoSegmentTimestamps: videoSegmentTimestamps,
       );
       return clip.copyWith(
         parts: newParts,

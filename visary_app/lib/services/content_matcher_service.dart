@@ -17,30 +17,54 @@ class ContentMatcherService {
 
   final AiProviderService _ai;
 
-  /// Describe setiap frame via VLM. PRD-SPRINT-14 §2.3.
+  /// Describe semua frame via VLM dalam 1 batch call (PRD-SPRINT-17 quota fix).
   ///
-  /// Untuk setiap frame: baca bytes → base64 encode → `visionPrompt()`.
-  /// Mengembalikan list deskripsi, satu per frame.
+  /// S14 awalnya 1 call per frame (N calls). Gemini free tier limit 5 RPM →
+  /// habis di frame ke-5. Batch: 1 call untuk semua frame.
   Future<List<String>> describeFrames({
     required List<String> framePaths,
   }) async {
-    final descriptions = <String>[];
+    if (framePaths.isEmpty) return [];
+
+    // Read all frames → base64 list.
+    final b64List = <String>[];
     for (final path in framePaths) {
       try {
         final bytes = await File(path).readAsBytes();
-        // Strip MIME line wrapping — Gemini inline_data rejects wrapped base64.
-        final b64 = base64Encode(bytes).replaceAll('\n', '');
-        final desc = await _ai.visionPrompt(
-          prompt: 'Describe what is shown in this image in one concise sentence.',
-          imageBase64: b64,
-        );
-        descriptions.add(desc.trim());
+        b64List.add(base64Encode(bytes).replaceAll('\n', ''));
       } catch (e) {
-        debugPrint('[ContentMatcher] describeFrames gagal untuk $path: $e');
-        descriptions.add('');
+        debugPrint('[ContentMatcher] read frame gagal untuk $path: $e');
+        b64List.add('');
       }
     }
-    return descriptions;
+
+    // Batch: 1 API call for all frames.
+    try {
+      return await _ai.visionBatchPrompt(
+        imageBase64List: b64List.where((b) => b.isNotEmpty).toList(),
+      );
+    } catch (e) {
+      debugPrint('[ContentMatcher] batch describeFrames gagal: $e → per-frame fallback');
+      // Fallback: per-frame (lama, boras quota).
+      final descriptions = <String>[];
+      for (var i = 0; i < framePaths.length; i++) {
+        if (b64List[i].isEmpty) {
+          descriptions.add('');
+          continue;
+        }
+        try {
+          final desc = await _ai.visionPrompt(
+            prompt: 'Describe what is shown in this image in one concise sentence.',
+            imageBase64: b64List[i],
+          );
+          descriptions.add(desc.trim());
+        } catch (e) {
+          debugPrint('[ContentMatcher] describeFrames gagal untuk frame $i: $e');
+          descriptions.add('');
+        }
+      }
+      return descriptions;
+    }
   }
 
   // ── S16: Semantic segmentation ──

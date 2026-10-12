@@ -393,20 +393,30 @@ class AiProviderService {
         final uri = Uri.parse(
           'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=$key',
         );
-        final res = await _client.post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'contents': [
-              {
-                'parts': [
-                  if (systemInstruction != null) {'text': systemInstruction},
-                  {'text': prompt},
-                ]
-              }
-            ]
-          }),
-        );
+        final body = jsonEncode({
+          'contents': [
+            {
+              'parts': [
+                if (systemInstruction != null) {'text': systemInstruction},
+                {'text': prompt},
+              ]
+            }
+          ]
+        });
+
+        // Retry 429/503 dengan delay dari API response (PRD-SPRINT-17 quota fix).
+        http.Response res;
+        for (var attempt = 0; ; attempt++) {
+          res = await _client.post(uri,
+              headers: {'Content-Type': 'application/json'}, body: body);
+          if (res.statusCode == 200) break;
+          final transient = res.statusCode == 429 || res.statusCode == 503;
+          if (!transient || attempt >= 2) break;
+          final delay = _extractRetryDelay(res.body) ?? (10 * (attempt + 1));
+          debugPrint('[Gemini LLM] ${res.statusCode} — retry ${attempt + 1}/3 in ${delay}s');
+          await Future.delayed(Duration(seconds: delay));
+        }
+
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
           final text = data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? '';
@@ -621,6 +631,162 @@ class AiProviderService {
     }
   }
 
+  /// Batch vision: kirim multiple image dalam 1 call (PRD-SPRINT-17 quota fix).
+  ///
+  /// Gemini: semua inline_data dalam 1 contents.parts array → 1 API call.
+  /// OpenAI: multiple image_url dalam 1 message → 1 API call.
+  /// Return list deskripsi, satu per image (diparse dari response).
+  Future<List<String>> visionBatchPrompt({
+    required List<String> imageBase64List,
+    String mimeType = 'image/jpeg',
+    String? promptText,
+  }) async {
+    if (imageBase64List.isEmpty) return [];
+
+    final active = await isByokActive();
+    if (!active) throw StateError('BYOK tidak aktif');
+
+    final provider = await getProviderForTask(TaskType.vision);
+    if (provider == AiProviderType.server) {
+      throw UnsupportedError(
+          'Vision API butuh Gemini atau OpenAI key. Isi di Settings.');
+    }
+
+    final prompt = promptText ??
+        'I am sending ${imageBase64List.length} images (frame 0 to ${imageBase64List.length - 1}). '
+        'For EACH image, write ONE concise sentence describing what is shown. '
+        'Format: "0: description" on each line. Return ONLY the numbered list.';
+
+    switch (provider) {
+      case AiProviderType.gemini:
+        final key = (await storage.getGeminiKey()) ?? '';
+        final uri = Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=$key',
+        );
+
+        // Build parts: text prompt + all images as inline_data.
+        final parts = <Map<String, dynamic>>[
+          {'text': prompt},
+          for (final b64 in imageBase64List)
+            {
+              'inline_data': {
+                'mime_type': mimeType,
+                'data': b64.replaceAll('\n', ''),
+              }
+            },
+        ];
+
+        final res = await _client.post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'contents': [{'parts': parts}],
+          }),
+        );
+
+        // Retry 429/503 dengan delay dari API response.
+        http.Response retryRes = res;
+        for (var attempt = 0; ; attempt++) {
+          if (retryRes.statusCode == 200) break;
+          final transient = retryRes.statusCode == 429 || retryRes.statusCode == 503;
+          if (!transient || attempt >= 2) break;
+          final delay = _extractRetryDelay(retryRes.body) ?? (10 * (attempt + 1));
+          debugPrint('[Gemini Vision Batch] ${retryRes.statusCode} — retry ${attempt + 1}/3 in ${delay}s');
+          await Future.delayed(Duration(seconds: delay));
+          retryRes = await _client.post(uri,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'contents': [{'parts': parts}]}));
+        }
+
+        if (retryRes.statusCode == 200) {
+          final data = jsonDecode(retryRes.body);
+          final text = (data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? '')
+              .toString();
+          return _parseBatchResponse(text, imageBase64List.length);
+        } else {
+          throw Exception('Gemini Vision Batch API Error ${retryRes.statusCode}: ${retryRes.body}');
+        }
+
+      case AiProviderType.openai:
+      case AiProviderType.custom:
+        final isCustom = provider == AiProviderType.custom;
+        final key = isCustom
+            ? (await storage.getCustomKey()) ?? ''
+            : (await storage.getOpenAiKey()) ?? '';
+        final base = isCustom
+            ? (((await storage.getCustomBaseUrl()) ?? '').trim())
+            : 'https://api.openai.com/v1/';
+        final model = isCustom
+            ? (await storage.getCustomModel()) ?? 'gpt-4o-mini'
+            : 'gpt-4o-mini';
+        if (base.isEmpty) {
+          throw StateError('Base URL custom belum diisi (Settings).');
+        }
+        final chatUrl = base.endsWith('/')
+            ? '${base}chat/completions'
+            : '$base/chat/completions';
+
+        // Build content: text + multiple image_url.
+        final content = <Map<String, dynamic>>[
+          {'type': 'text', 'text': prompt},
+          for (final b64 in imageBase64List)
+            {
+              'type': 'image_url',
+              'image_url': {'url': 'data:$mimeType;base64,$b64'},
+            },
+        ];
+
+        final res = await _client.post(
+          Uri.parse(chatUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $key',
+          },
+          body: jsonEncode({
+            'model': model,
+            'messages': [{'role': 'user', 'content': content}],
+          }),
+        );
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          final text = (data['choices']?[0]?['message']?['content'] ?? '').toString();
+          return _parseBatchResponse(text, imageBase64List.length);
+        } else {
+          throw Exception('${provider.name.toUpperCase()} Vision Batch API Error ${res.statusCode}: ${res.body}');
+        }
+
+      case AiProviderType.groq:
+        throw UnsupportedError(
+            'Groq tidak support vision API. Switch ke Gemini/OpenAI di Settings.');
+
+      case AiProviderType.server:
+        throw UnsupportedError('Server Visary tidak support vision API.');
+    }
+  }
+
+  /// Parse batch vision response: "0: desc\n1: desc\n..." → List<String>.
+  /// Fallback: split by newline, strip prefix.
+  List<String> _parseBatchResponse(String text, int expectedCount) {
+    final lines = text.trim().split('\n').where((l) => l.trim().isNotEmpty).toList();
+    final descriptions = <String>[];
+
+    for (final line in lines) {
+      // Strip "0:" or "0." prefix if present.
+      final match = RegExp(r'^\d+[:.]\s*(.*)').firstMatch(line.trim());
+      if (match != null) {
+        descriptions.add(match.group(1)!.trim());
+      } else {
+        descriptions.add(line.trim());
+      }
+    }
+
+    // Pad/truncate to expected count.
+    while (descriptions.length < expectedCount) {
+      descriptions.add('');
+    }
+    return descriptions.take(expectedCount).toList();
+  }
+
   /// ASR: transkripsi audio → [Transcript] (PRD-SPRINT-11 §2.2).
   ///
   /// Cloud via provider aktif (custom/openai/groq: multipart POST
@@ -810,6 +976,34 @@ class AiProviderService {
     }
     final trimmed = responseBody.trim();
     return trimmed.length > 200 ? '${trimmed.substring(0, 200)}...' : trimmed;
+  }
+
+  /// Extract retry delay (seconds) dari Gemini 429/503 error response.
+  /// Format: {"error": {"details": [{"@type": "...RetryInfo", "retryDelay": "34s"}]}}
+  /// Return null jika tidak ada retryDelay.
+  int? _extractRetryDelay(String responseBody) {
+    try {
+      final data = jsonDecode(responseBody);
+      final error = data['error'];
+      if (error is Map<String, dynamic>) {
+        final details = error['details'];
+        if (details is List) {
+          for (final d in details) {
+            if (d is Map<String, dynamic>) {
+              final retryDelay = d['retryDelay'];
+              if (retryDelay is String) {
+                // Parse "34s" or "34.14s" → int seconds.
+                final match = RegExp(r'(\d+)').firstMatch(retryDelay);
+                if (match != null) {
+                  return int.tryParse(match.group(1)!);
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   /// Transcribe audio yang >18MB dengan chunking FFmpeg.
