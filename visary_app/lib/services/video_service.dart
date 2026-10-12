@@ -512,6 +512,47 @@ class VideoService {
     return outputPath;
   }
 
+  /// Extract 1 frame dari video pada timestamp tertentu. PRD-SPRINT-14 §2.2.
+  ///
+  /// FFmpeg: `-ss {timestamp} -i {source} -frames:v 1 -q:v 2 {output}.jpg`.
+  /// Dipakai oleh ContentMatcherService untuk mengirim frame ke VLM.
+  static Future<String> extractFrame({
+    required String sourcePath,
+    required double timestamp,
+    required String outputPath,
+  }) async {
+    if (!File(sourcePath).existsSync()) {
+      throw FileSystemException('File video tidak ditemukan', sourcePath);
+    }
+    await Directory(File(outputPath).parent.path).create(recursive: true);
+
+    final args = <String>[
+      '-hide_banner', '-loglevel', 'error',
+      '-ss', timestamp.toStringAsFixed(3),
+      '-i', sourcePath,
+      '-frames:v', '1',
+      '-q:v', '2',
+      '-y', outputPath,
+    ];
+
+    final ProcessResult res;
+    try {
+      res = await Process.run(ffmpegBin, args);
+    } on ProcessException {
+      throw FfmpegMissingException(ffmpegBin);
+    }
+    if (res.exitCode != 0) {
+      throw FfmpegFailedException(
+          'extract frame', res.exitCode, _tail(res.stderr.toString()));
+    }
+    if (!File(outputPath).existsSync()) {
+      throw FfmpegFailedException('extract frame', res.exitCode,
+          'output file tidak dibuat');
+    }
+    debugPrint('[VideoService] frame diekstrak: $outputPath');
+    return outputPath;
+  }
+
   // ─────────────────── B-ROLL OVERLAY (PRD-SPRINT-05 §3.2.4) ─────────────
 
   /// Render clip dengan B-roll overlay di rentang waktu tertentu.

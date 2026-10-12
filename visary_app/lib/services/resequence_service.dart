@@ -55,13 +55,18 @@ class Resequencer {
     return segs.isEmpty ? [(0, duration)] : segs;
   }
 
-  /// Build ClipParts: video dibagi urut (sequential) sesuai jumlah audio
-  /// segment, setiap segment di-speed-adjust supaya durasi match audio.
-  /// Tidak ada pengulangan — seluruh video dipakai sekali. PRD-SPRINT-13.
+  /// Build ClipParts: video dibagi urut (sequential atau matchOrder) sesuai
+  /// jumlah audio segment, setiap segment di-speed-adjust supaya durasi
+  /// match audio. PRD-SPRINT-13 (sequential) + PRD-SPRINT-14 (matchOrder).
+  ///
+  /// Bila [matchOrder] diberikan, gunakan `matchOrder[i]` sebagai video
+  /// segment index untuk audio segment i (content-aware).
+  /// Bila null/kosong → fallback sequential (S13 behavior).
   List<ClipPart> buildParts({
     required List<double> cutPoints,
     required double videoDuration,
     required double fallbackDuration,
+    List<int>? matchOrder,
   }) {
     if (cutPoints.length < 2 || videoDuration <= 0) {
       return [ClipPart(0, fallbackDuration)];
@@ -75,9 +80,12 @@ class Resequencer {
       final audioDur = cutPoints[i + 1] - cutPoints[i];
       if (audioDur <= 0) continue;
 
-      // Sequential video segment: bagian video berurutan, tidak cycle.
-      final vStart = i * videoSegDur;
-      final vEnd = (i + 1) * videoSegDur;
+      // Content-aware: gunakan matchOrder[i] bila tersedia, else sequential i.
+      final segIdx = (matchOrder != null && i < matchOrder.length)
+          ? matchOrder[i]
+          : i;
+      final vStart = segIdx * videoSegDur;
+      final vEnd = (segIdx + 1) * videoSegDur;
 
       // Speed-adjust: videoSegDur / audioDur.
       // audio lama + video pendek → speed < 1 (slowmo).
@@ -93,10 +101,14 @@ class Resequencer {
 
   /// Re-sequence semua clip dalam project berdasarkan transcript.
   /// Returns new clips list (does not mutate state).
+  ///
+  /// Bila [matchOrder] diberikan (PRD-SPRINT-14), gunakan content-aware
+  /// ordering. Bila null → timing-based sequential (S13).
   List<Clip> resequence({
     required List<Clip> clips,
     required VideoSignals signals,
     required double videoDuration,
+    List<int>? matchOrder,
   }) {
     final t = signals.transcript;
     if (t == null || t.words.isEmpty) return clips;
@@ -108,6 +120,7 @@ class Resequencer {
         cutPoints: cutPoints,
         videoDuration: videoDuration,
         fallbackDuration: clip.duration,
+        matchOrder: matchOrder,
       );
       return clip.copyWith(
         parts: newParts,

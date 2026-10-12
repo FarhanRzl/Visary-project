@@ -396,6 +396,138 @@ class AiProviderService {
     }
   }
 
+  /// Vision inference: kirim image + text prompt ke VLM. PRD-SPRINT-14 §2.1.
+  ///
+  /// Gemini: `inline_data {mime_type, data: base64}` dalam `parts`.
+  /// OpenAI: `image_url {url: "data:image/jpeg;base64,..."}` dalam `messages`.
+  /// Groq / Server: tidak support vision → `UnsupportedError`.
+  /// Custom: coba format OpenAI-compatible vision.
+  Future<String> visionPrompt({
+    required String prompt,
+    required String imageBase64,
+    String mimeType = 'image/jpeg',
+  }) async {
+    final active = await isByokActive();
+    if (!active) throw StateError('BYOK tidak aktif');
+
+    final provider = await storage.getActiveProvider();
+    switch (provider) {
+      case AiProviderType.gemini:
+        final key = (await storage.getGeminiKey()) ?? '';
+        final uri = Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$key',
+        );
+        final res = await _client.post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'contents': [
+              {
+                'parts': [
+                  {'text': prompt},
+                  {
+                    'inline_data': {
+                      'mime_type': mimeType,
+                      'data': imageBase64,
+                    }
+                  },
+                ]
+              }
+            ]
+          }),
+        );
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          final text =
+              data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? '';
+          return text.toString();
+        } else {
+          throw Exception('Gemini Vision API Error ${res.statusCode}: ${res.body}');
+        }
+
+      case AiProviderType.openai:
+        final key = (await storage.getOpenAiKey()) ?? '';
+        final dataUri = 'data:$mimeType;base64,$imageBase64';
+        final res = await _client.post(
+          Uri.parse('https://api.openai.com/v1/chat/completions'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $key',
+          },
+          body: jsonEncode({
+            'model': 'gpt-4o-mini',
+            'messages': [
+              {
+                'role': 'user',
+                'content': [
+                  {'type': 'text', 'text': prompt},
+                  {
+                    'type': 'image_url',
+                    'image_url': {'url': dataUri}
+                  },
+                ]
+              },
+            ],
+          }),
+        );
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          return data['choices']?[0]?['message']?['content'] ?? '';
+        } else {
+          throw Exception('OpenAI Vision API Error ${res.statusCode}: ${res.body}');
+        }
+
+      case AiProviderType.groq:
+        throw UnsupportedError(
+            'Groq tidak support vision API. Switch ke Gemini/OpenAI di Settings.');
+
+      case AiProviderType.custom:
+        final key = (await storage.getCustomKey()) ?? '';
+        final base = ((await storage.getCustomBaseUrl()) ?? '').trim();
+        final model = (await storage.getCustomModel()) ?? 'gpt-4o-mini';
+        if (base.isEmpty) {
+          throw StateError('Base URL custom belum diisi (Settings).');
+        }
+        final chatUrl = base.endsWith('/')
+            ? '${base}chat/completions'
+            : '$base/chat/completions';
+        final dataUri = 'data:$mimeType;base64,$imageBase64';
+        final res = await _client.post(
+          Uri.parse(chatUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $key',
+          },
+          body: jsonEncode({
+            'model': model,
+            'messages': [
+              {
+                'role': 'user',
+                'content': [
+                  {'type': 'text', 'text': prompt},
+                  {
+                    'type': 'image_url',
+                    'image_url': {'url': dataUri}
+                  },
+                ]
+              },
+            ],
+          }),
+        );
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          return data['choices']?[0]?['message']?['content'] ?? '';
+        } else {
+          throw Exception(
+              'Custom Vision API ($base) Error ${res.statusCode}: ${res.body}');
+        }
+
+      case AiProviderType.server:
+        throw UnsupportedError(
+            'Server Visary tidak support vision API. Aktifkan BYOK dengan Gemini/OpenAI.');
+    }
+  }
+
   /// ASR: transkripsi audio → [Transcript] (PRD-SPRINT-11 §2.2).
   ///
   /// Cloud via provider aktif (custom/openai/groq: multipart POST

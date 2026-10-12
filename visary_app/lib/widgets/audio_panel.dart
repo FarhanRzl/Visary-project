@@ -27,6 +27,8 @@ class AudioPanel extends StatefulWidget {
 class _AudioPanelState extends State<AudioPanel> {
   bool _busy = false;
   bool _isTranscribing = false;
+  bool _isMatching = false;
+  String _matchStage = '';
 
   Future<void> _upload() async {
     final state = context.read<AppState>();
@@ -116,6 +118,48 @@ class _AudioPanelState extends State<AudioPanel> {
       }
     } finally {
       if (mounted) setState(() => _isTranscribing = false);
+    }
+  }
+
+  /// Content-aware audio-visual matching via VLM + LLM. PRD-SPRINT-14.
+  Future<void> _matchContent() async {
+    setState(() {
+      _isMatching = true;
+      _matchStage = 'Starting...';
+    });
+    try {
+      final state = context.read<AppState>();
+      final matchOrder = await state.contentAwareResequence(
+        widget.projectId,
+        onProgress: (stage) {
+          if (mounted) setState(() => _matchStage = stage);
+        },
+      );
+      if (mounted) {
+        showBrutalSnack(
+          context,
+          'Content matched: ${matchOrder.length} segments. Clips di-resequence.',
+        );
+      }
+    } on UnsupportedError catch (e) {
+      if (mounted) {
+        showBrutalSnack(context, e.message ?? 'Unsupported provider', color: VC.pink);
+      }
+    } on StateError catch (e) {
+      if (mounted) {
+        showBrutalSnack(context, e.message, color: VC.pink);
+      }
+    } catch (e) {
+      if (mounted) {
+        showBrutalSnack(context, 'Match content gagal: $e', color: VC.pink);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isMatching = false;
+          _matchStage = '';
+        });
+      }
     }
   }
 
@@ -234,6 +278,40 @@ class _AudioPanelState extends State<AudioPanel> {
                   kind: BtnKind.dark,
                   expand: true,
                   onTap: _transcribeAudio,
+                ),
+            ],
+
+            // Match Content — PRD-SPRINT-14
+            if (mode == AudioMode.replacement &&
+                state.signalsOf(widget.projectId)?.transcript != null &&
+                (state.signalsOf(widget.projectId)?.transcript?.words
+                        .isNotEmpty ??
+                    false)) ...[
+              const SizedBox(height: 16),
+              const Divider(color: VC.ink, thickness: 2),
+              const SizedBox(height: 12),
+              Text('CONTENT-AWARE MATCHING',
+                  style: VT.mono(12, color: VC.muted)),
+              const SizedBox(height: 8),
+              if (_isMatching) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(color: VC.purple),
+                      const SizedBox(height: 8),
+                      Text(_matchStage, style: VT.mono(11, color: VC.muted)),
+                    ],
+                  ),
+                ),
+              ] else
+                BButton(
+                  label: 'MATCH CONTENT',
+                  icon: Icons.compare,
+                  kind: BtnKind.primary,
+                  expand: true,
+                  onTap: _matchContent,
                 ),
             ],
           ],

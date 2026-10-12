@@ -10,6 +10,7 @@ import '../data/local/workspace_storage.dart';
 import '../models/models.dart';
 import '../services/ai_provider_service.dart';
 import '../services/ai_service.dart';
+import '../services/content_matcher_service.dart';
 import '../services/local_analyzer.dart';
 import '../services/resequence_service.dart';
 import '../services/video_service.dart' show VideoService, FfmpegMissingException, BrollOverlay;
@@ -610,8 +611,8 @@ class AppState extends ChangeNotifier {
   }
 
   /// Re-sequence clip parts berdasarkan word boundary dari transcript.
-  /// PRD-SPRINT-13 §2.2.
-  void resequenceClips(String projectId) {
+  /// PRD-SPRINT-13 §2.2 + PRD-SPRINT-14 (matchOrder passthrough).
+  void resequenceClips(String projectId, {List<int>? matchOrder}) {
     final p = byId(projectId);
     if (p == null) return;
     final signals = _signals[projectId];
@@ -623,8 +624,153 @@ class AppState extends ChangeNotifier {
       clips: p.clips,
       signals: signals,
       videoDuration: p.probe?.durationSec ?? 0,
+      matchOrder: matchOrder,
     );
     _put(p.copyWith(clips: newClips));
+  }
+
+  // ─────── CONTENT-AWARE MATCHING (PRD-SPRINT-14) ───────────
+
+  /// Multi-stage content-aware re-sequencing pipeline.
+  /// PRD-SPRINT-14 §2.7.
+  ///
+  /// 1. Extract frames per shot → VLM describe → visual descriptions.
+  /// 2. Extract audio topics from transcript.
+  /// 3. Match content via LLM → match order.
+  /// 4. Resequence clips with matchOrder.
+  ///
+  /// [onProgress] menerima label tahap untuk UI multi-stage progress.
+  /// Fallback: bila VLM/LLM gagal di tahap manapun → timing-based (S13).
+  Future<List<int>> contentAwareResequence(
+    String projectId, {
+    void Function(String stage)? onProgress,
+  }) async {
+    final p = byId(projectId);
+    if (p == null) throw StateError('Project tidak ditemukan');
+    final signals = _signals[projectId];
+    if (signals == null) throw StateError('Sinyal video belum dianalisis');
+    final t = signals.transcript;
+    if (t == null || t.words.isEmpty) {
+      throw StateError('Transcript kosong — jalankan transcribeReplacementAudio dahulu');
+    }
+
+    final videoDuration = p.probe?.durationSec ?? 0;
+    final dir = await _workDir(projectId);
+    final matcher = ContentMatcherService(aiService);
+
+    // ── Cek provider: Groq/Server tidak support vision ──
+    final provider = await aiService.storage.getActiveProvider();
+    final byokActive = await aiService.isByokActive();
+    if (byokActive &&
+        (provider == AiProviderType.groq || provider == AiProviderType.server)) {
+      throw UnsupportedError(
+          'Vision API butuh Gemini atau OpenAI. Switch provider di Settings.');
+    }
+
+    List<int>? matchOrder;
+
+    // ── Stage 1: Extract frames per shot ──
+    onProgress?.call('Extracting frames...');
+    final framePaths = <String>[];
+    final framesDir = Directory('${dir.path}/frames');
+    if (!await framesDir.exists()) await framesDir.create(recursive: true);
+
+    // Shot midpoints: 1 frame per shot, timestamp = (shot[i] + shot[i+1]) / 2.
+    final shots = signals.shots;
+    final frameTimestamps = <double>[];
+    if (shots.length > 1) {
+      for (var i = 0; i < shots.length - 1; i++) {
+        final mid = (shots[i] + shots[i + 1]) / 2;
+        frameTimestamps.add(mid);
+      }
+    } else {
+      // Fallback: extract frame per 3 detik.
+      for (double s = 1.5; s < videoDuration; s += 3) {
+        frameTimestamps.add(s);
+      }
+    }
+
+    // Limit max 20 frames (PRD §6 risk mitigation).
+    if (frameTimestamps.length > 20) {
+      // Subsample evenly.
+      final step = frameTimestamps.length / 20;
+      final sampled = <double>[];
+      for (var i = 0; i < 20; i++) {
+        sampled.add(frameTimestamps[(i * step).floor()]);
+      }
+      frameTimestamps.clear();
+      frameTimestamps.addAll(sampled);
+    }
+
+    for (var i = 0; i < frameTimestamps.length; i++) {
+      final outPath = '${framesDir.path}/shot_$i.jpg';
+      try {
+        await VideoService.extractFrame(
+          sourcePath: p.filePath,
+          timestamp: frameTimestamps[i],
+          outputPath: outPath,
+        );
+        framePaths.add(outPath);
+      } catch (e) {
+        debugPrint('[S14] frame extraction gagal untuk shot $i: $e');
+      }
+    }
+
+    if (framePaths.isEmpty) {
+      // Fallback: timing-based resequence.
+      debugPrint('[S14] tidak ada frame → fallback timing-based');
+      resequenceClips(projectId);
+      notifyListeners();
+      return [];
+    }
+
+    // ── Stage 2: Describe frames via VLM ──
+    onProgress?.call('Analyzing visuals...');
+    List<String> visualDescriptions;
+    try {
+      visualDescriptions = await matcher.describeFrames(framePaths: framePaths);
+    } catch (e) {
+      debugPrint('[S14] describeFrames gagal: $e → fallback timing-based');
+      resequenceClips(projectId);
+      notifyListeners();
+      return [];
+    }
+
+    // ── Stage 3: Extract audio topics ──
+    onProgress?.call('Extracting topics...');
+    final cutPoints = _resequencer.detectCutPoints(t.words);
+    List<String> audioTopics;
+    try {
+      audioTopics = await matcher.extractTopics(
+        words: t.words,
+        cutPoints: cutPoints,
+      );
+    } catch (e) {
+      debugPrint('[S14] extractTopics gagal: $e → fallback timing-based');
+      resequenceClips(projectId);
+      notifyListeners();
+      return [];
+    }
+
+    // ── Stage 4: Match content via LLM ──
+    onProgress?.call('Matching content...');
+    try {
+      matchOrder = await matcher.matchContent(
+        visualDescriptions: visualDescriptions,
+        audioTopics: audioTopics,
+      );
+    } catch (e) {
+      debugPrint('[S14] matchContent gagal: $e → fallback timing-based');
+      matchOrder = null;
+    }
+
+    // ── Stage 5: Resequence with matchOrder ──
+    onProgress?.call('Re-sequencing clips...');
+    resequenceClips(projectId, matchOrder: matchOrder);
+    notifyListeners();
+
+    onProgress?.call('Done');
+    return matchOrder ?? [];
   }
 
   // ─────────────────── B-ROLL RECOMMENDATION (PRD-SPRINT-05) ──────────────
