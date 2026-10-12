@@ -304,7 +304,7 @@ class AiProviderService {
       case AiProviderType.gemini:
         final key = (await storage.getGeminiKey()) ?? '';
         final uri = Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$key',
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=$key',
         );
         final res = await _client.post(
           uri,
@@ -415,7 +415,7 @@ class AiProviderService {
       case AiProviderType.gemini:
         final key = (await storage.getGeminiKey()) ?? '';
         final uri = Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$key',
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=$key',
         );
         final res = await _client.post(
           uri,

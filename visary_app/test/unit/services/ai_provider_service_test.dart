@@ -76,7 +76,7 @@ void main() {
   group('AiProviderService routing & prompt inference', () {
     test('Direct HTTP prompt call saat BYOK aktif dengan Gemini', () async {
       final mockClient = MockClient((request) async {
-        if (request.url.toString().contains('gemini-1.5-flash:generateContent')) {
+        if (request.url.toString().contains('gemini-flash-latest:generateContent')) {
           return http.Response(
             '{"candidates": [{"content": {"parts": [{"text": "Saran B-roll: Bunga mekar"}]}}]}',
             200,
