@@ -203,7 +203,7 @@ void main() {
       expect(ranges, isEmpty);
     });
 
-    test('empty visual descriptions → returns degenerate ranges', () async {
+    test('empty visual descriptions → empty result', () async {
       final ai = _fake(sendPromptHandler: (_) => '[[0,0]]');
       final matcher = ContentMatcherService(ai);
 
@@ -214,10 +214,8 @@ void main() {
         segments: segments,
       );
 
-      // visualDescriptions.isEmpty → returns List.generate(2, (_) => (0, 0))
-      expect(ranges.length, 2);
-      expect(ranges[0], (0, 0));
-      expect(ranges[1], (0, 0));
+      // Empty visual descriptions → no ranges to match → empty result
+      expect(ranges, isEmpty);
     });
 
     test('nested empty arrays in LLM response → fallback', () async {

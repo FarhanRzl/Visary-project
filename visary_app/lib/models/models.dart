@@ -3,6 +3,47 @@ library models;
 
 enum ClipType { linear, resequenced }
 
+/// Status hasil matching visual-audio per segmen (S18 P3).
+enum MatchStatus {
+  /// LLM menemukan range visual yang relevan dengan topik audio.
+  matched,
+  /// LLM menemukan range tapi tidak yakin (partial match, ambiguous).
+  uncertain,
+  /// Tidak ada frame visual yang match dengan topik audio.
+  noMatch,
+}
+
+/// Hasil matching satu segmen audio ke range frame visual (S18 P3).
+class RangeMatch {
+  final MatchStatus status;
+  final int startFrame;
+  final int endFrame;
+
+  /// true jika punya range valid (matched atau uncertain).
+  bool get hasRange => status != MatchStatus.noMatch && startFrame >= 0;
+
+  const RangeMatch({
+    required this.status,
+    this.startFrame = -1,
+    this.endFrame = -1,
+  });
+
+  /// Construct matched range.
+  const RangeMatch.matched(int start, int end)
+      : status = MatchStatus.matched,
+        startFrame = start,
+        endFrame = end;
+
+  /// Construct no_match (no range).
+  const RangeMatch.noMatch()
+      : status = MatchStatus.noMatch,
+        startFrame = -1,
+        endFrame = -1;
+
+  @override
+  String toString() => 'RangeMatch($status, $startFrame-$endFrame)';
+}
+
 /// Format output export (PRD §4.6 — MVP hanya 9:16 dan 1:1).
 enum AspectFormat {
   v9x16,

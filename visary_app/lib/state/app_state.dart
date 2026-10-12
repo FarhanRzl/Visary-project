@@ -796,21 +796,22 @@ class AppState extends ChangeNotifier {
     }
 
     // ── Stage 4: Match content via LLM — frame RANGES per topic ──
-    // New: LLM finds contiguous frame range per audio topic.
-    // Visual persists until audio topic changes.
+    // New (S18 P3): LLM returns matched/uncertain/no_match per segment.
+    // no_match segments get fallback ranges — pipeline continues but
+    // status is logged for transparency.
     onProgress?.call('Matching content (frame ranges)...');
-    List<(int, int)> frameRanges;
-    try {
-      frameRanges = await matcher.matchContentRanges(
-        visualDescriptions: visualDescriptions,
-        segments: segments,
-      );
-    } catch (e) {
-      debugPrint('[S18] matchContentRanges gagal: $e → fallback even split');
-      frameRanges = matcher.fallbackRanges(
-          visualDescriptions.length, segments.length);
-    }
+    final rangeMatches = await matcher.matchContentRangesWithStatus(
+      visualDescriptions: visualDescriptions,
+      segments: segments,
+    );
+    final frameRanges = rangeMatches.map((m) => (m.startFrame, m.endFrame)).toList();
 
+    // Log match quality for diagnostics.
+    final matched = rangeMatches.where((m) => m.status == MatchStatus.matched).length;
+    final uncertain = rangeMatches.where((m) => m.status == MatchStatus.uncertain).length;
+    final noMatch = rangeMatches.where((m) => m.status == MatchStatus.noMatch).length;
+    debugPrint('[S18] Match results: $matched matched, $uncertain uncertain, '
+        '$noMatch no_match (of ${segments.length} segments)');
     debugPrint('[S18] Frame ranges: $frameRanges');
 
     // ── Stage 5: Resequence with frame ranges + timestamps ──

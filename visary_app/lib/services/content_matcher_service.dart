@@ -365,13 +365,21 @@ class ContentMatcherService {
   ///
   /// Returns list of (startFrameIdx, endFrameIdx) per audio segment.
   /// Each range maps to actual frame timestamps → visual segment boundaries.
-  Future<List<(int, int)>> matchContentRanges({
+  /// Match visual frames to audio segments using LLM.
+  ///
+  /// New approach (S18 P3): LLM returns status per segment:
+  /// - "matched": range found, confident
+  /// - "uncertain": range found, not confident
+  /// - "no_match": no relevant visual found
+  ///
+  /// Segments with no_match get fallback ranges (even split).
+  /// This separates validated matches from fallback continuity.
+  Future<List<RangeMatch>> matchContentRangesWithStatus({
     required List<String> visualDescriptions,
     required List<TranscriptSegment> segments,
   }) async {
     if (segments.isEmpty || visualDescriptions.isEmpty) {
-      return List.generate(
-          segments.length, (i) => (0, visualDescriptions.length - 1 < 0 ? 0 : 0));
+      return [];
     }
 
     final prompt = _buildRangeMatchPrompt(visualDescriptions, segments);
@@ -379,13 +387,31 @@ class ContentMatcherService {
     try {
       response = await _ai.sendPrompt(prompt: prompt);
     } catch (e) {
-      debugPrint('[ContentMatcher] matchContentRanges LLM call gagal: $e');
-      // Fallback: distribute frames evenly across segments.
-      return fallbackRanges(visualDescriptions.length, segments.length);
+      debugPrint('[ContentMatcher] matchContentRangesWithStatus LLM call gagal: $e');
+      // All segments → no_match with fallback ranges
+      final fallback = fallbackRanges(visualDescriptions.length, segments.length);
+      return List.generate(segments.length, (i) => RangeMatch(
+        status: MatchStatus.noMatch,
+        startFrame: fallback[i].$1,
+        endFrame: fallback[i].$2,
+      ));
     }
 
-    return _parseRangeResponse(
+    return _parseRangeMatchResponse(
         response, segments.length, visualDescriptions.length);
+  }
+
+  /// Backward-compatible: return just the ranges (without status).
+  /// no_match segments get fallback range.
+  Future<List<(int, int)>> matchContentRanges({
+    required List<String> visualDescriptions,
+    required List<TranscriptSegment> segments,
+  }) async {
+    final result = await matchContentRangesWithStatus(
+      visualDescriptions: visualDescriptions,
+      segments: segments,
+    );
+    return result.map((r) => (r.startFrame, r.endFrame)).toList();
   }
 
   /// Build prompt for range-based matching.
@@ -410,40 +436,127 @@ class ContentMatcherService {
     buf.writeln('The visual should persist until the audio topic changes.');
     buf.writeln('All frames must be covered (no gaps, no overlaps).');
     buf.writeln();
-    buf.writeln('Return ONLY a JSON array of [startFrame, endFrame] pairs '
+    buf.writeln('For each segment, assign a match status:');
+    buf.writeln('- "matched": Visual frames clearly show the audio topic.');
+    buf.writeln('- "uncertain": Partial or ambiguous match (best guess).');
+    buf.writeln('- "no_match": No frame shows this topic (abstract concept, off-screen).');
+    buf.writeln('  For no_match, use [-1, -1] as the range.');
+    buf.writeln();
+    buf.writeln('Return ONLY a JSON array of [status, startFrame, endFrame] triples '
         '(0-based, inclusive).');
-    buf.writeln('Example: [[0,2], [3,5], [6,9]]');
+    buf.writeln('Example: [["matched",0,2], ["uncertain",3,5], ["no_match",-1,-1], ["matched",6,9]]');
     buf.writeln('Length must equal ${segments.length}.');
     return buf.toString();
   }
 
-  /// Parse range response → List<(int, int)>.
-  List<(int, int)> _parseRangeResponse(
+  /// Parse range response with status → List<RangeMatch>.
+  ///
+  /// LLM returns: [["matched",0,2], ["no_match",-1,-1], ...]
+  /// - matched/uncertain with valid range → keep LLM range
+  /// - no_match → fallback range, status=noMatch
+  /// - matched with invalid range → no_match + fallback
+  /// - Unknown status → uncertain (keep range if valid)
+  List<RangeMatch> _parseRangeMatchResponse(
     String response,
     int expectedLength,
     int frameCount,
   ) {
+    final fallback = fallbackRanges(frameCount, expectedLength);
+
     try {
       final arrayMatch = RegExp(r'\[[\s\S]*\]').firstMatch(response);
       if (arrayMatch == null) {
-        return fallbackRanges(frameCount, expectedLength);
+        // No JSON → all fallback no_match
+        return List.generate(expectedLength, (i) => RangeMatch(
+          status: MatchStatus.noMatch,
+          startFrame: fallback[i].$1,
+          endFrame: fallback[i].$2,
+        ));
       }
       final parsed = jsonDecode(arrayMatch.group(0)!) as List;
-      final ranges = <(int, int)>[];
+      final matches = <RangeMatch>[];
       for (final e in parsed) {
-        if (e is List && e.length >= 2) {
+        if (e is List && e.length >= 3) {
+          final statusStr = e[0].toString().toLowerCase();
+          final start = (e[1] as num).toInt();
+          final end = (e[2] as num).toInt();
+
+          // Determine status
+          MatchStatus status;
+          switch (statusStr) {
+            case 'matched':
+              status = MatchStatus.matched;
+              break;
+            case 'no_match':
+            case 'nomatch':
+              status = MatchStatus.noMatch;
+              break;
+            case 'uncertain':
+              status = MatchStatus.uncertain;
+              break;
+            default:
+              // Unknown status → uncertain
+              status = MatchStatus.uncertain;
+          }
+
+          // Validate range
+          final hasValidRange = start >= 0 && end >= start;
+          if (status == MatchStatus.noMatch || !hasValidRange) {
+            // no_match or invalid range → will get fallback
+            matches.add(const RangeMatch.noMatch());
+          } else {
+            // Clamp to valid frame range
+            final clampedStart = start.clamp(0, frameCount - 1);
+            final clampedEnd = end.clamp(clampedStart, frameCount - 1);
+            matches.add(RangeMatch(
+              status: status,
+              startFrame: clampedStart,
+              endFrame: clampedEnd,
+            ));
+          }
+        } else if (e is List && e.length >= 2) {
+          // Old format: [startFrame, endFrame] without status → assume matched
           final start = (e[0] as num).toInt().clamp(0, frameCount - 1);
           final end = (e[1] as num).toInt().clamp(start, frameCount - 1);
-          ranges.add((start, end));
+          matches.add(RangeMatch(
+            status: MatchStatus.matched,
+            startFrame: start,
+            endFrame: end,
+          ));
         }
       }
-      if (ranges.length != expectedLength) {
-        return fallbackRanges(frameCount, expectedLength);
+
+      if (matches.length != expectedLength) {
+        // Length mismatch → all fallback
+        return List.generate(expectedLength, (i) => RangeMatch(
+          status: MatchStatus.noMatch,
+          startFrame: fallback[i].$1,
+          endFrame: fallback[i].$2,
+        ));
       }
-      return ranges;
+
+      // Assign fallback ranges to no_match segments
+      final result = <RangeMatch>[];
+      for (var i = 0; i < matches.length; i++) {
+        if (matches[i].status == MatchStatus.noMatch) {
+          result.add(RangeMatch(
+            status: MatchStatus.noMatch,
+            startFrame: fallback[i].$1,
+            endFrame: fallback[i].$2,
+          ));
+        } else {
+          result.add(matches[i]);
+        }
+      }
+
+      return result;
     } catch (e) {
-      debugPrint('[ContentMatcher] parse ranges gagal: $e → fallback');
-      return fallbackRanges(frameCount, expectedLength);
+      debugPrint('[ContentMatcher] parse range match gagal: $e → fallback');
+      return List.generate(expectedLength, (i) => RangeMatch(
+        status: MatchStatus.noMatch,
+        startFrame: fallback[i].$1,
+        endFrame: fallback[i].$2,
+      ));
     }
   }
 
