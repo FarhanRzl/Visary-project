@@ -1594,18 +1594,411 @@ class AssetsTableCompanion extends UpdateCompanion<AssetRow> {
   }
 }
 
+class $TranscriptsTableTable extends TranscriptsTable
+    with TableInfo<$TranscriptsTableTable, TranscriptRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TranscriptsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _projectIdMeta =
+      const VerificationMeta('projectId');
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+      'project_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES projects (id) ON DELETE CASCADE'));
+  static const VerificationMeta _assetIdMeta =
+      const VerificationMeta('assetId');
+  @override
+  late final GeneratedColumn<String> assetId = GeneratedColumn<String>(
+      'asset_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _fullTextMeta =
+      const VerificationMeta('fullText');
+  @override
+  late final GeneratedColumn<String> fullText = GeneratedColumn<String>(
+      'full_text', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _wordsJsonMeta =
+      const VerificationMeta('wordsJson');
+  @override
+  late final GeneratedColumn<String> wordsJson = GeneratedColumn<String>(
+      'words_json', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _languageMeta =
+      const VerificationMeta('language');
+  @override
+  late final GeneratedColumn<String> language = GeneratedColumn<String>(
+      'language', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _providerMeta =
+      const VerificationMeta('provider');
+  @override
+  late final GeneratedColumn<String> provider = GeneratedColumn<String>(
+      'provider', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [projectId, assetId, fullText, wordsJson, language, provider, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'transcripts';
+  @override
+  VerificationContext validateIntegrity(Insertable<TranscriptRow> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('project_id')) {
+      context.handle(_projectIdMeta,
+          projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta));
+    } else if (isInserting) {
+      context.missing(_projectIdMeta);
+    }
+    if (data.containsKey('asset_id')) {
+      context.handle(_assetIdMeta,
+          assetId.isAcceptableOrUnknown(data['asset_id']!, _assetIdMeta));
+    }
+    if (data.containsKey('full_text')) {
+      context.handle(_fullTextMeta,
+          fullText.isAcceptableOrUnknown(data['full_text']!, _fullTextMeta));
+    } else if (isInserting) {
+      context.missing(_fullTextMeta);
+    }
+    if (data.containsKey('words_json')) {
+      context.handle(_wordsJsonMeta,
+          wordsJson.isAcceptableOrUnknown(data['words_json']!, _wordsJsonMeta));
+    } else if (isInserting) {
+      context.missing(_wordsJsonMeta);
+    }
+    if (data.containsKey('language')) {
+      context.handle(_languageMeta,
+          language.isAcceptableOrUnknown(data['language']!, _languageMeta));
+    }
+    if (data.containsKey('provider')) {
+      context.handle(_providerMeta,
+          provider.isAcceptableOrUnknown(data['provider']!, _providerMeta));
+    } else if (isInserting) {
+      context.missing(_providerMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {projectId};
+  @override
+  TranscriptRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TranscriptRow(
+      projectId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}project_id'])!,
+      assetId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}asset_id']),
+      fullText: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}full_text'])!,
+      wordsJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}words_json'])!,
+      language: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}language']),
+      provider: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}provider'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $TranscriptsTableTable createAlias(String alias) {
+    return $TranscriptsTableTable(attachedDatabase, alias);
+  }
+}
+
+class TranscriptRow extends DataClass implements Insertable<TranscriptRow> {
+  final String projectId;
+  final String? assetId;
+  final String fullText;
+  final String wordsJson;
+  final String? language;
+  final String provider;
+  final int createdAt;
+  const TranscriptRow(
+      {required this.projectId,
+      this.assetId,
+      required this.fullText,
+      required this.wordsJson,
+      this.language,
+      required this.provider,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['project_id'] = Variable<String>(projectId);
+    if (!nullToAbsent || assetId != null) {
+      map['asset_id'] = Variable<String>(assetId);
+    }
+    map['full_text'] = Variable<String>(fullText);
+    map['words_json'] = Variable<String>(wordsJson);
+    if (!nullToAbsent || language != null) {
+      map['language'] = Variable<String>(language);
+    }
+    map['provider'] = Variable<String>(provider);
+    map['created_at'] = Variable<int>(createdAt);
+    return map;
+  }
+
+  TranscriptsTableCompanion toCompanion(bool nullToAbsent) {
+    return TranscriptsTableCompanion(
+      projectId: Value(projectId),
+      assetId: assetId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(assetId),
+      fullText: Value(fullText),
+      wordsJson: Value(wordsJson),
+      language: language == null && nullToAbsent
+          ? const Value.absent()
+          : Value(language),
+      provider: Value(provider),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory TranscriptRow.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TranscriptRow(
+      projectId: serializer.fromJson<String>(json['projectId']),
+      assetId: serializer.fromJson<String?>(json['assetId']),
+      fullText: serializer.fromJson<String>(json['fullText']),
+      wordsJson: serializer.fromJson<String>(json['wordsJson']),
+      language: serializer.fromJson<String?>(json['language']),
+      provider: serializer.fromJson<String>(json['provider']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'projectId': serializer.toJson<String>(projectId),
+      'assetId': serializer.toJson<String?>(assetId),
+      'fullText': serializer.toJson<String>(fullText),
+      'wordsJson': serializer.toJson<String>(wordsJson),
+      'language': serializer.toJson<String?>(language),
+      'provider': serializer.toJson<String>(provider),
+      'createdAt': serializer.toJson<int>(createdAt),
+    };
+  }
+
+  TranscriptRow copyWith(
+          {String? projectId,
+          Value<String?> assetId = const Value.absent(),
+          String? fullText,
+          String? wordsJson,
+          Value<String?> language = const Value.absent(),
+          String? provider,
+          int? createdAt}) =>
+      TranscriptRow(
+        projectId: projectId ?? this.projectId,
+        assetId: assetId.present ? assetId.value : this.assetId,
+        fullText: fullText ?? this.fullText,
+        wordsJson: wordsJson ?? this.wordsJson,
+        language: language.present ? language.value : this.language,
+        provider: provider ?? this.provider,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  TranscriptRow copyWithCompanion(TranscriptsTableCompanion data) {
+    return TranscriptRow(
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      assetId: data.assetId.present ? data.assetId.value : this.assetId,
+      fullText: data.fullText.present ? data.fullText.value : this.fullText,
+      wordsJson: data.wordsJson.present ? data.wordsJson.value : this.wordsJson,
+      language: data.language.present ? data.language.value : this.language,
+      provider: data.provider.present ? data.provider.value : this.provider,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TranscriptRow(')
+          ..write('projectId: $projectId, ')
+          ..write('assetId: $assetId, ')
+          ..write('fullText: $fullText, ')
+          ..write('wordsJson: $wordsJson, ')
+          ..write('language: $language, ')
+          ..write('provider: $provider, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      projectId, assetId, fullText, wordsJson, language, provider, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TranscriptRow &&
+          other.projectId == this.projectId &&
+          other.assetId == this.assetId &&
+          other.fullText == this.fullText &&
+          other.wordsJson == this.wordsJson &&
+          other.language == this.language &&
+          other.provider == this.provider &&
+          other.createdAt == this.createdAt);
+}
+
+class TranscriptsTableCompanion extends UpdateCompanion<TranscriptRow> {
+  final Value<String> projectId;
+  final Value<String?> assetId;
+  final Value<String> fullText;
+  final Value<String> wordsJson;
+  final Value<String?> language;
+  final Value<String> provider;
+  final Value<int> createdAt;
+  final Value<int> rowid;
+  const TranscriptsTableCompanion({
+    this.projectId = const Value.absent(),
+    this.assetId = const Value.absent(),
+    this.fullText = const Value.absent(),
+    this.wordsJson = const Value.absent(),
+    this.language = const Value.absent(),
+    this.provider = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TranscriptsTableCompanion.insert({
+    required String projectId,
+    this.assetId = const Value.absent(),
+    required String fullText,
+    required String wordsJson,
+    this.language = const Value.absent(),
+    required String provider,
+    required int createdAt,
+    this.rowid = const Value.absent(),
+  })  : projectId = Value(projectId),
+        fullText = Value(fullText),
+        wordsJson = Value(wordsJson),
+        provider = Value(provider),
+        createdAt = Value(createdAt);
+  static Insertable<TranscriptRow> custom({
+    Expression<String>? projectId,
+    Expression<String>? assetId,
+    Expression<String>? fullText,
+    Expression<String>? wordsJson,
+    Expression<String>? language,
+    Expression<String>? provider,
+    Expression<int>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (projectId != null) 'project_id': projectId,
+      if (assetId != null) 'asset_id': assetId,
+      if (fullText != null) 'full_text': fullText,
+      if (wordsJson != null) 'words_json': wordsJson,
+      if (language != null) 'language': language,
+      if (provider != null) 'provider': provider,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TranscriptsTableCompanion copyWith(
+      {Value<String>? projectId,
+      Value<String?>? assetId,
+      Value<String>? fullText,
+      Value<String>? wordsJson,
+      Value<String?>? language,
+      Value<String>? provider,
+      Value<int>? createdAt,
+      Value<int>? rowid}) {
+    return TranscriptsTableCompanion(
+      projectId: projectId ?? this.projectId,
+      assetId: assetId ?? this.assetId,
+      fullText: fullText ?? this.fullText,
+      wordsJson: wordsJson ?? this.wordsJson,
+      language: language ?? this.language,
+      provider: provider ?? this.provider,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (assetId.present) {
+      map['asset_id'] = Variable<String>(assetId.value);
+    }
+    if (fullText.present) {
+      map['full_text'] = Variable<String>(fullText.value);
+    }
+    if (wordsJson.present) {
+      map['words_json'] = Variable<String>(wordsJson.value);
+    }
+    if (language.present) {
+      map['language'] = Variable<String>(language.value);
+    }
+    if (provider.present) {
+      map['provider'] = Variable<String>(provider.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TranscriptsTableCompanion(')
+          ..write('projectId: $projectId, ')
+          ..write('assetId: $assetId, ')
+          ..write('fullText: $fullText, ')
+          ..write('wordsJson: $wordsJson, ')
+          ..write('language: $language, ')
+          ..write('provider: $provider, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$VisaryDatabase extends GeneratedDatabase {
   _$VisaryDatabase(QueryExecutor e) : super(e);
   $VisaryDatabaseManager get managers => $VisaryDatabaseManager(this);
   late final $ProjectsTableTable projectsTable = $ProjectsTableTable(this);
   late final $ClipsTableTable clipsTable = $ClipsTableTable(this);
   late final $AssetsTableTable assetsTable = $AssetsTableTable(this);
+  late final $TranscriptsTableTable transcriptsTable =
+      $TranscriptsTableTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [projectsTable, clipsTable, assetsTable];
+      [projectsTable, clipsTable, assetsTable, transcriptsTable];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules(
         [
@@ -1621,6 +2014,13 @@ abstract class _$VisaryDatabase extends GeneratedDatabase {
                 limitUpdateKind: UpdateKind.delete),
             result: [
               TableUpdate('assets', kind: UpdateKind.delete),
+            ],
+          ),
+          WritePropagation(
+            on: TableUpdateQuery.onTableName('projects',
+                limitUpdateKind: UpdateKind.delete),
+            result: [
+              TableUpdate('transcripts', kind: UpdateKind.delete),
             ],
           ),
         ],
@@ -1689,6 +2089,22 @@ final class $$ProjectsTableTableReferences
         .filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_assetsTableRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$TranscriptsTableTable, List<TranscriptRow>>
+      _transcriptsTableRefsTable(_$VisaryDatabase db) =>
+          MultiTypedResultKey.fromTable(db.transcriptsTable,
+              aliasName: 'projects__id__transcripts__project_id');
+
+  $$TranscriptsTableTableProcessedTableManager get transcriptsTableRefs {
+    final manager = $$TranscriptsTableTableTableManager(
+            $_db, $_db.transcriptsTable)
+        .filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache =
+        $_typedResult.readTableOrNull(_transcriptsTableRefsTable($_db));
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
@@ -1774,6 +2190,27 @@ class $$ProjectsTableTableFilterComposer
             $$AssetsTableTableFilterComposer(
               $db: $db,
               $table: $db.assetsTable,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> transcriptsTableRefs(
+      Expression<bool> Function($$TranscriptsTableTableFilterComposer f) f) {
+    final $$TranscriptsTableTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.transcriptsTable,
+        getReferencedColumn: (t) => t.projectId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TranscriptsTableTableFilterComposer(
+              $db: $db,
+              $table: $db.transcriptsTable,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -1917,6 +2354,27 @@ class $$ProjectsTableTableAnnotationComposer
             ));
     return f(composer);
   }
+
+  Expression<T> transcriptsTableRefs<T extends Object>(
+      Expression<T> Function($$TranscriptsTableTableAnnotationComposer a) f) {
+    final $$TranscriptsTableTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.transcriptsTable,
+        getReferencedColumn: (t) => t.projectId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TranscriptsTableTableAnnotationComposer(
+              $db: $db,
+              $table: $db.transcriptsTable,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$ProjectsTableTableTableManager extends RootTableManager<
@@ -1930,7 +2388,10 @@ class $$ProjectsTableTableTableManager extends RootTableManager<
     $$ProjectsTableTableUpdateCompanionBuilder,
     (ProjectRow, $$ProjectsTableTableReferences),
     ProjectRow,
-    PrefetchHooks Function({bool clipsTableRefs, bool assetsTableRefs})> {
+    PrefetchHooks Function(
+        {bool clipsTableRefs,
+        bool assetsTableRefs,
+        bool transcriptsTableRefs})> {
   $$ProjectsTableTableTableManager(
       _$VisaryDatabase db, $ProjectsTableTable table)
       : super(TableManagerState(
@@ -2009,12 +2470,15 @@ class $$ProjectsTableTableTableManager extends RootTableManager<
                   ))
               .toList(),
           prefetchHooksCallback: (
-              {clipsTableRefs = false, assetsTableRefs = false}) {
+              {clipsTableRefs = false,
+              assetsTableRefs = false,
+              transcriptsTableRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
                 if (clipsTableRefs) db.clipsTable,
-                if (assetsTableRefs) db.assetsTable
+                if (assetsTableRefs) db.assetsTable,
+                if (transcriptsTableRefs) db.transcriptsTable
               ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
@@ -2044,6 +2508,19 @@ class $$ProjectsTableTableTableManager extends RootTableManager<
                         referencedItemsForCurrentItem:
                             (item, referencedItems) => referencedItems
                                 .where((e) => e.projectId == item.id),
+                        typedResults: items),
+                  if (transcriptsTableRefs)
+                    await $_getPrefetchedData<ProjectRow, $ProjectsTableTable,
+                            TranscriptRow>(
+                        currentTable: table,
+                        referencedTable: $$ProjectsTableTableReferences
+                            ._transcriptsTableRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$ProjectsTableTableReferences(db, table, p0)
+                                .transcriptsTableRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.projectId == item.id),
                         typedResults: items)
                 ];
               },
@@ -2063,7 +2540,10 @@ typedef $$ProjectsTableTableProcessedTableManager = ProcessedTableManager<
     $$ProjectsTableTableUpdateCompanionBuilder,
     (ProjectRow, $$ProjectsTableTableReferences),
     ProjectRow,
-    PrefetchHooks Function({bool clipsTableRefs, bool assetsTableRefs})>;
+    PrefetchHooks Function(
+        {bool clipsTableRefs,
+        bool assetsTableRefs,
+        bool transcriptsTableRefs})>;
 typedef $$ClipsTableTableCreateCompanionBuilder = ClipsTableCompanion Function({
   required String id,
   required String projectId,
@@ -2746,6 +3226,313 @@ typedef $$AssetsTableTableProcessedTableManager = ProcessedTableManager<
     (AssetRow, $$AssetsTableTableReferences),
     AssetRow,
     PrefetchHooks Function({bool projectId})>;
+typedef $$TranscriptsTableTableCreateCompanionBuilder
+    = TranscriptsTableCompanion Function({
+  required String projectId,
+  Value<String?> assetId,
+  required String fullText,
+  required String wordsJson,
+  Value<String?> language,
+  required String provider,
+  required int createdAt,
+  Value<int> rowid,
+});
+typedef $$TranscriptsTableTableUpdateCompanionBuilder
+    = TranscriptsTableCompanion Function({
+  Value<String> projectId,
+  Value<String?> assetId,
+  Value<String> fullText,
+  Value<String> wordsJson,
+  Value<String?> language,
+  Value<String> provider,
+  Value<int> createdAt,
+  Value<int> rowid,
+});
+
+final class $$TranscriptsTableTableReferences extends BaseReferences<
+    _$VisaryDatabase, $TranscriptsTableTable, TranscriptRow> {
+  $$TranscriptsTableTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $ProjectsTableTable _projectIdTable(_$VisaryDatabase db) =>
+      db.projectsTable.createAlias('transcripts__project_id__projects__id');
+
+  $$ProjectsTableTableProcessedTableManager get projectId {
+    final $_column = $_itemColumn<String>('project_id')!;
+
+    final manager = $$ProjectsTableTableTableManager($_db, $_db.projectsTable)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_projectIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$TranscriptsTableTableFilterComposer
+    extends Composer<_$VisaryDatabase, $TranscriptsTableTable> {
+  $$TranscriptsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get assetId => $composableBuilder(
+      column: $table.assetId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get fullText => $composableBuilder(
+      column: $table.fullText, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get wordsJson => $composableBuilder(
+      column: $table.wordsJson, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get language => $composableBuilder(
+      column: $table.language, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get provider => $composableBuilder(
+      column: $table.provider, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  $$ProjectsTableTableFilterComposer get projectId {
+    final $$ProjectsTableTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.projectId,
+        referencedTable: $db.projectsTable,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProjectsTableTableFilterComposer(
+              $db: $db,
+              $table: $db.projectsTable,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$TranscriptsTableTableOrderingComposer
+    extends Composer<_$VisaryDatabase, $TranscriptsTableTable> {
+  $$TranscriptsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get assetId => $composableBuilder(
+      column: $table.assetId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get fullText => $composableBuilder(
+      column: $table.fullText, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get wordsJson => $composableBuilder(
+      column: $table.wordsJson, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get language => $composableBuilder(
+      column: $table.language, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get provider => $composableBuilder(
+      column: $table.provider, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  $$ProjectsTableTableOrderingComposer get projectId {
+    final $$ProjectsTableTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.projectId,
+        referencedTable: $db.projectsTable,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProjectsTableTableOrderingComposer(
+              $db: $db,
+              $table: $db.projectsTable,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$TranscriptsTableTableAnnotationComposer
+    extends Composer<_$VisaryDatabase, $TranscriptsTableTable> {
+  $$TranscriptsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get assetId =>
+      $composableBuilder(column: $table.assetId, builder: (column) => column);
+
+  GeneratedColumn<String> get fullText =>
+      $composableBuilder(column: $table.fullText, builder: (column) => column);
+
+  GeneratedColumn<String> get wordsJson =>
+      $composableBuilder(column: $table.wordsJson, builder: (column) => column);
+
+  GeneratedColumn<String> get language =>
+      $composableBuilder(column: $table.language, builder: (column) => column);
+
+  GeneratedColumn<String> get provider =>
+      $composableBuilder(column: $table.provider, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ProjectsTableTableAnnotationComposer get projectId {
+    final $$ProjectsTableTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.projectId,
+        referencedTable: $db.projectsTable,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProjectsTableTableAnnotationComposer(
+              $db: $db,
+              $table: $db.projectsTable,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$TranscriptsTableTableTableManager extends RootTableManager<
+    _$VisaryDatabase,
+    $TranscriptsTableTable,
+    TranscriptRow,
+    $$TranscriptsTableTableFilterComposer,
+    $$TranscriptsTableTableOrderingComposer,
+    $$TranscriptsTableTableAnnotationComposer,
+    $$TranscriptsTableTableCreateCompanionBuilder,
+    $$TranscriptsTableTableUpdateCompanionBuilder,
+    (TranscriptRow, $$TranscriptsTableTableReferences),
+    TranscriptRow,
+    PrefetchHooks Function({bool projectId})> {
+  $$TranscriptsTableTableTableManager(
+      _$VisaryDatabase db, $TranscriptsTableTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TranscriptsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TranscriptsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TranscriptsTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> projectId = const Value.absent(),
+            Value<String?> assetId = const Value.absent(),
+            Value<String> fullText = const Value.absent(),
+            Value<String> wordsJson = const Value.absent(),
+            Value<String?> language = const Value.absent(),
+            Value<String> provider = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              TranscriptsTableCompanion(
+            projectId: projectId,
+            assetId: assetId,
+            fullText: fullText,
+            wordsJson: wordsJson,
+            language: language,
+            provider: provider,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String projectId,
+            Value<String?> assetId = const Value.absent(),
+            required String fullText,
+            required String wordsJson,
+            Value<String?> language = const Value.absent(),
+            required String provider,
+            required int createdAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              TranscriptsTableCompanion.insert(
+            projectId: projectId,
+            assetId: assetId,
+            fullText: fullText,
+            wordsJson: wordsJson,
+            language: language,
+            provider: provider,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable<$TranscriptsTableTable, TranscriptRow>(table),
+                    $$TranscriptsTableTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({projectId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (projectId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.projectId,
+                    referencedTable:
+                        $$TranscriptsTableTableReferences._projectIdTable(db),
+                    referencedColumn: $$TranscriptsTableTableReferences
+                        ._projectIdTable(db)
+                        .id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$TranscriptsTableTableProcessedTableManager = ProcessedTableManager<
+    _$VisaryDatabase,
+    $TranscriptsTableTable,
+    TranscriptRow,
+    $$TranscriptsTableTableFilterComposer,
+    $$TranscriptsTableTableOrderingComposer,
+    $$TranscriptsTableTableAnnotationComposer,
+    $$TranscriptsTableTableCreateCompanionBuilder,
+    $$TranscriptsTableTableUpdateCompanionBuilder,
+    (TranscriptRow, $$TranscriptsTableTableReferences),
+    TranscriptRow,
+    PrefetchHooks Function({bool projectId})>;
 
 class $VisaryDatabaseManager {
   final _$VisaryDatabase _db;
@@ -2756,4 +3543,6 @@ class $VisaryDatabaseManager {
       $$ClipsTableTableTableManager(_db, _db.clipsTable);
   $$AssetsTableTableTableManager get assetsTable =>
       $$AssetsTableTableTableManager(_db, _db.assetsTable);
+  $$TranscriptsTableTableTableManager get transcriptsTable =>
+      $$TranscriptsTableTableTableManager(_db, _db.transcriptsTable);
 }

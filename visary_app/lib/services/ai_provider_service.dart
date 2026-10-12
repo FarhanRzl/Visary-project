@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -428,7 +429,8 @@ class AiProviderService {
                   {
                     'inline_data': {
                       'mime_type': mimeType,
-                      'data': imageBase64,
+                      // Strip MIME-style line wrapping from base64 — Gemini rejects it.
+                      'data': imageBase64.replaceAll('\n', ''),
                     }
                   },
                 ]
@@ -545,9 +547,7 @@ class AiProviderService {
     }
     final provider = await storage.getActiveProvider();
     if (provider == AiProviderType.gemini) {
-      // TODO(PRD-SPRINT-11): Gemini inline audio base64 → text (no word ts).
-      return const Transcript(
-          fullText: '', words: [], language: null, provider: 'gemini');
+      return await _transcribeViaGemini(audioFilePath, language);
     }
 
     final (base, key, model) = await _asrEndpoint(provider);
@@ -591,6 +591,213 @@ class AiProviderService {
       language: (data['language'] as String?) ?? language,
       provider: provider.name,
     );
+  }
+
+  /// Gemini inline audio ASR: send audio as inline_data → text.
+  /// No word-level timestamps from API — estimated via even distribution
+  /// (~2.5 words/sec, 150 WPM average speaking rate).
+  /// PRD-SPRINT-11 (Gemini inline audio, previously TODO).
+  Future<Transcript> _transcribeViaGemini(
+    String audioFilePath,
+    String? language,
+  ) async {
+    final key = (await storage.getGeminiKey()) ?? '';
+    final file = File(audioFilePath);
+    if (!file.existsSync()) {
+      throw Exception('Gemini ASR: file audio tidak ditemukan ($audioFilePath)');
+    }
+
+    // Audio chunking: Gemini inline_data limit ~20MB raw (~26MB base64).
+    // Files >18MB safety margin → split via FFmpeg, transcribe per chunk,
+    // merge with offset word timestamps. PRD-SPRINT-15 §2.7.
+    final fileSize = file.lengthSync();
+    const maxBytes = 18 * 1024 * 1024; // 18MB safety margin
+    if (fileSize > maxBytes) {
+      return await _transcribeGeminiChunked(audioFilePath, language, fileSize);
+    }
+
+    final bytes = await file.readAsBytes();
+    // Dart base64Encode wraps at 76 chars with \n (RFC 2045 MIME).
+    // Gemini inline_data rejects wrapped base64 with 400 "Base64 decoding failed".
+    final b64 = base64Encode(bytes).replaceAll('\n', '');
+
+    final ext = audioFilePath.split('.').last.toLowerCase();
+    final mimeType = switch (ext) {
+      'mp3' => 'audio/mp3',
+      'wav' => 'audio/wav',
+      'm4a' || 'mp4' => 'audio/mp4',
+      'ogg' => 'audio/ogg',
+      'flac' => 'audio/flac',
+      'aac' => 'audio/aac',
+      _ => 'audio/mp3',
+    };
+
+    final promptText = language != null
+        ? 'Transcribe this audio accurately in $language. Return only the transcribed text.'
+        : 'Transcribe this audio accurately. Return only the transcribed text.';
+
+    final uri = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=$key',
+    );
+    final body = jsonEncode({
+      'contents': [
+        {
+          'parts': [
+            {'inline_data': {'mime_type': mimeType, 'data': b64}},
+            {'text': promptText},
+          ]
+        }
+      ],
+    });
+
+    // Retry transient errors (502/503) up to 3 times with backoff.
+    http.Response res;
+    for (var attempt = 0; ; attempt++) {
+      res = await _client.post(uri,
+          headers: {'Content-Type': 'application/json'}, body: body);
+      if (res.statusCode == 200) break;
+      final transient = res.statusCode == 502 || res.statusCode == 503;
+      if (!transient || attempt >= 2) break;
+      debugPrint('[Gemini ASR] ${res.statusCode} — retry ${attempt + 1}/3');
+      await Future.delayed(Duration(seconds: 2 * (attempt + 1)));
+    }
+
+    if (res.statusCode != 200) {
+      final msg = _extractGeminiError(res.body);
+      debugPrint('[Gemini ASR] Error ${res.statusCode}: $msg');
+      throw Exception('Gemini ASR ${res.statusCode}: $msg');
+    }
+
+    final data = jsonDecode(res.body);
+    final text =
+        (data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? '')
+            .toString()
+            .trim();
+
+    if (text.isEmpty) {
+      throw Exception('Gemini ASR: transcript kosong (audio tidak terdeteksi?)');
+    }
+
+    // Gemini doesn't return word timestamps.
+    // Estimate: ~2.5 words/second (150 WPM average speaking rate).
+    final wordStrs = text
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .toList();
+    const wordsPerSec = 2.5;
+    final words = <WordToken>[];
+    for (var i = 0; i < wordStrs.length; i++) {
+      final start = i / wordsPerSec;
+      final end = (i + 1) / wordsPerSec;
+      words.add(WordToken(word: wordStrs[i], start: start, end: end));
+    }
+
+    return Transcript(
+      fullText: text,
+      words: words,
+      language: language,
+      provider: 'gemini',
+    );
+  }
+
+  /// Extract human-readable error message from Gemini API error response.
+  String _extractGeminiError(String responseBody) {
+    try {
+      final data = jsonDecode(responseBody);
+      final error = data['error'];
+      if (error is Map<String, dynamic>) {
+        final message = error['message'];
+        if (message is String && message.isNotEmpty) return message;
+      }
+    } catch (_) {
+      // Response wasn't JSON — return raw body (truncated).
+    }
+    final trimmed = responseBody.trim();
+    return trimmed.length > 200 ? '${trimmed.substring(0, 200)}...' : trimmed;
+  }
+
+  /// Transcribe audio yang >18MB dengan chunking FFmpeg.
+  /// Split audio jadi segmen ~15MB, transcribe per segmen, merge word timestamps.
+  /// PRD-SPRINT-15 §2.7.
+  Future<Transcript> _transcribeGeminiChunked(
+    String audioFilePath,
+    String? language,
+    int fileSize,
+  ) async {
+    debugPrint('[ASR] Chunking audio ${fileSize ~/ 1024}KB > 18MB limit');
+
+    // Probe duration via FFmpeg untuk hitung chunk count.
+    final probeResult = await Process.run('ffprobe', [
+      '-v', 'quiet',
+      '-print_format', 'json',
+      '-show_format',
+      audioFilePath,
+    ]);
+    double totalDuration = 0;
+    if (probeResult.exitCode == 0) {
+      final fmt = jsonDecode(probeResult.stdout)['format'];
+      totalDuration = double.tryParse(fmt['duration']?.toString() ?? '') ?? 0;
+    }
+    if (totalDuration <= 0) {
+      throw Exception('Gemini ASR chunking: cannot probe audio duration');
+    }
+
+    // Hitung chunk count: target ~15MB per chunk.
+    final bytesPerSec = fileSize / totalDuration;
+    const targetChunkBytes = 15 * 1024 * 1024.0; // 15MB
+    final chunkDuration = targetChunkBytes / bytesPerSec;
+    final numChunks = (totalDuration / chunkDuration).ceil();
+    final actualChunkDur = totalDuration / numChunks;
+
+    debugPrint('[ASR] Splitting ${totalDuration}s into $numChunks chunks '
+        'of ~${actualChunkDur.toStringAsFixed(1)}s each');
+
+    final tmpDir = Directory.systemTemp.createTempSync('visary_chunk');
+    final allWords = <WordToken>[];
+    String fullText = '';
+    const provider = 'gemini-flash-latest';
+
+    try {
+      for (var i = 0; i < numChunks; i++) {
+        final start = i * actualChunkDur;
+        final chunkPath = '${tmpDir.path}/chunk_$i.m4a';
+        final splitResult = await Process.run('ffmpeg', [
+          '-y', '-i', audioFilePath,
+          '-ss', start.toStringAsFixed(3),
+          '-t', actualChunkDur.toStringAsFixed(3),
+          '-vn', '-acodec', 'aac', '-b:a', '128k',
+          chunkPath,
+        ]);
+        if (splitResult.exitCode != 0) {
+          throw Exception('FFmpeg chunk $i failed: ${splitResult.stderr}');
+        }
+
+        // Transcribe chunk (recursive call, chunk < 18MB so no infinite loop).
+        final chunkTranscript = await _transcribeViaGemini(
+          chunkPath,
+          language,
+        );
+
+        // Offset word timestamps by chunk start time.
+        for (final w in chunkTranscript.words) {
+          allWords.add(WordToken(
+            word: w.word,
+            start: w.start + start,
+            end: w.end + start,
+          ));
+        }
+        fullText += '${chunkTranscript.fullText} ';
+      }
+
+      return Transcript(
+        fullText: fullText.trim(),
+        words: allWords,
+        language: language,
+        provider: provider,
+      );
+    } finally {
+      await tmpDir.delete(recursive: true);
+    }
   }
 
   /// Resolve (baseUrl, apiKey, asrModel) untuk provider OpenAI-compatible.

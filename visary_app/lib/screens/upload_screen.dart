@@ -37,6 +37,22 @@ class _UploadScreenState extends State<UploadScreen> {
     try {
       await state.addProjectFromUpload(fileName, filePath: filePath);
       if (mounted) {
+        // ASR mungkin gagal (non-fatal) — tampilkan warning sebelum navigasi.
+        if (state.asrError != null) {
+          setState(() {
+            _processing = false;
+            _uploadingFileName = null;
+          });
+          _showErrorDialog(
+            'Transkripsi Audio Gagal',
+            'Video berhasil diproses, tapi transkripsi ASR gagal:\n\n'
+            '${state.asrError}\n\n'
+            'Klip tetap dibuat tanpa caption word-level. '
+            'Cek API key/provider di Settings atau coba lagi nanti.',
+          );
+          state.asrError = null;
+          return;
+        }
         setState(() {
           _processing = false;
           _uploadingFileName = null;

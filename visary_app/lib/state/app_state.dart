@@ -195,6 +195,9 @@ class AppState extends ChangeNotifier {
   /// Pesan global terakhir (mis. ffmpeg tidak ada) untuk ditampilkan UI.
   String? toolingError;
 
+  /// Pesan error ASR terakhir (non-fatal — pipeline tetap jalan tanpa transcript).
+  String? asrError;
+
   Project? get activeProject =>
       projects.where((p) => p.id == activeProjectId).firstOrNull;
 
@@ -243,6 +246,23 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(loaded);
     activeProjectId ??= projects.firstOrNull?.id;
+
+    // Restore transcript dari DB ke _signals (PRD-SPRINT-15 §2.3).
+    // VideoSignals adalah in-memory only — setelah restart, _signals kosong.
+    // Transcript yang sudah di-persist perlu di-restore supaya user tidak
+    // perlu re-transcribe setiap restart.
+    for (final p in projects) {
+      final t = await r.loadTranscript(p.id);
+      if (t != null && t.words.isNotEmpty) {
+        // Buat minimal VideoSignals supaya transcript bisa disimpan.
+        // Shot boundaries dan energy tidak di-restore (harus re-scan).
+        final dur = p.probe?.durationSec ?? 0;
+        _signals[p.id] ??= VideoSignals(
+            shots: [0, dur], energy: const [], duration: dur);
+        _signals[p.id]!.transcript = t;
+      }
+    }
+
     notifyListeners();
     await storage.cleanOrphans(projects.map((p) => p.id).toSet());
   }
@@ -309,7 +329,16 @@ class AppState extends ChangeNotifier {
               '[ASR] transkrip: ${signals.transcript?.words.length ?? 0} words, '
               'provider=${signals.transcript?.provider}, '
               'empty=${signals.transcript?.isEmpty}');
+
+          // Persist transcript ke DB (PRD-SPRINT-15 §2.3).
+          // Survive restart — user tidak perlu re-transcribe.
+          if (repo != null && signals.transcript != null) {
+            await repo!.saveTranscript(id, signals.transcript!);
+          }
         } catch (e) {
+          // ASR gagal — pipeline tetap jalan tanpa transcript, tapi simpan
+          // pesan error supaya UI bisa tampilkan ke user (bukan silent fail).
+          asrError = e.toString();
           debugPrint('ASR gagal (non-fatal, fallback tanpa transkrip): $e');
         }
       }
@@ -606,6 +635,11 @@ class AppState extends ChangeNotifier {
     debugPrint('[S13] transkrip audio pengganti: ${t.words.length} words, '
         'provider=${t.provider}');
 
+    // Persist transcript replacement ke DB (PRD-SPRINT-15 §2.3).
+    if (repo != null) {
+      await repo!.saveTranscript(projectId, t, assetId: audio.id);
+    }
+
     resequenceClips(projectId);
     notifyListeners();
   }
@@ -626,6 +660,31 @@ class AppState extends ChangeNotifier {
       videoDuration: p.probe?.durationSec ?? 0,
       matchOrder: matchOrder,
     );
+    _put(p.copyWith(clips: newClips));
+  }
+
+  /// Apply matchOrder ke clip parts tanpa word-boundary resequencing.
+  /// Dipakai saat content matching jalan tanpa transcript (visual-only).
+  /// Video dibagi N segmen sesuai matchOrder, speed-adjust ke durasi clip.
+  /// PRD-SPRINT-15 §2.5.
+  void _resequenceVisualOnly(String projectId, List<int> matchOrder) {
+    final p = byId(projectId);
+    if (p == null || matchOrder.isEmpty) return;
+    final videoDuration = p.probe?.durationSec ?? 0;
+    if (videoDuration <= 0) return;
+
+    final numSegs = matchOrder.length;
+    final videoSegDur = videoDuration / numSegs;
+    final newClips = p.clips.map((clip) {
+      final parts = <ClipPart>[];
+      for (var i = 0; i < numSegs; i++) {
+        final segIdx = matchOrder[i];
+        final vStart = segIdx * videoSegDur;
+        final vEnd = (segIdx + 1) * videoSegDur;
+        parts.add(ClipPart(vStart, vEnd, 1.0));
+      }
+      return clip.copyWith(parts: parts, type: ClipType.resequenced);
+    }).toList();
     _put(p.copyWith(clips: newClips));
   }
 
@@ -650,9 +709,9 @@ class AppState extends ChangeNotifier {
     final signals = _signals[projectId];
     if (signals == null) throw StateError('Sinyal video belum dianalisis');
     final t = signals.transcript;
-    if (t == null || t.words.isEmpty) {
-      throw StateError('Transcript kosong — jalankan transcribeReplacementAudio dahulu');
-    }
+    // Visual-only fallback: transcript boleh null/kosong — matching jalan
+    // dengan visual descriptions saja (PRD-SPRINT-15 §2.5).
+    final hasTranscript = t != null && t.words.isNotEmpty;
 
     final videoDuration = p.probe?.durationSec ?? 0;
     final dir = await _workDir(projectId);
@@ -736,20 +795,24 @@ class AppState extends ChangeNotifier {
       return [];
     }
 
-    // ── Stage 3: Extract audio topics ──
-    onProgress?.call('Extracting topics...');
-    final cutPoints = _resequencer.detectCutPoints(t.words);
-    List<String> audioTopics;
-    try {
-      audioTopics = await matcher.extractTopics(
-        words: t.words,
-        cutPoints: cutPoints,
-      );
-    } catch (e) {
-      debugPrint('[S14] extractTopics gagal: $e → fallback timing-based');
-      resequenceClips(projectId);
-      notifyListeners();
-      return [];
+    // ── Stage 3: Extract audio topics (skip if no transcript) ──
+    List<String> audioTopics = [];
+    // hasTranscript sudah cek t != null, tapi analyzer perlu konfirmasi.
+    // ignore: unnecessary_null_comparison
+    if (hasTranscript && t != null) {
+      onProgress?.call('Extracting topics...');
+      final cutPoints = _resequencer.detectCutPoints(t.words);
+      try {
+        audioTopics = await matcher.extractTopics(
+          words: t.words,
+          cutPoints: cutPoints,
+        );
+      } catch (e) {
+        debugPrint('[S14] extractTopics gagal: $e → visual-only matching');
+      }
+    } else {
+      onProgress?.call('Visual-only matching (no transcript)...');
+      debugPrint('[S15] no transcript → visual-only matching');
     }
 
     // ── Stage 4: Match content via LLM ──
@@ -765,8 +828,16 @@ class AppState extends ChangeNotifier {
     }
 
     // ── Stage 5: Resequence with matchOrder ──
+    // Dengan transcript: resequence clips dengan matchOrder (content-aware).
+    // Tanpa transcript: hanya apply matchOrder ke clip parts (visual-only),
+    // tidak pakai word-boundary resequencing karena tidak ada word timestamps.
     onProgress?.call('Re-sequencing clips...');
-    resequenceClips(projectId, matchOrder: matchOrder);
+    if (hasTranscript) {
+      resequenceClips(projectId, matchOrder: matchOrder);
+    } else if (matchOrder != null && matchOrder.isNotEmpty) {
+      // Visual-only: apply matchOrder ke clip parts tanpa word-boundary.
+      _resequenceVisualOnly(projectId, matchOrder);
+    }
     notifyListeners();
 
     onProgress?.call('Done');

@@ -79,7 +79,28 @@ class AssetsTable extends Table {
   Set<Column> get primaryKey => {id, projectId};
 }
 
-@DriftDatabase(tables: [ProjectsTable, ClipsTable, AssetsTable])
+/// Tabel transcript — persist ASR result per project (PRD-SPRINT-15 §2.3).
+/// Satu row per project (PK = project_id). CASCADE delete mengikuti project.
+@DataClassName('TranscriptRow')
+class TranscriptsTable extends Table {
+  @override
+  String get tableName => 'transcripts';
+
+  TextColumn get projectId => text()
+      .named('project_id')
+      .references(ProjectsTable, #id, onDelete: KeyAction.cascade)();
+  TextColumn get assetId => text().named('asset_id').nullable()();
+  TextColumn get fullText => text().named('full_text')();
+  TextColumn get wordsJson => text().named('words_json')();
+  TextColumn get language => text().nullable()();
+  TextColumn get provider => text()();
+  IntColumn get createdAt => integer().named('created_at')();
+
+  @override
+  Set<Column> get primaryKey => {projectId};
+}
+
+@DriftDatabase(tables: [ProjectsTable, ClipsTable, AssetsTable, TranscriptsTable])
 class VisaryDatabase extends _$VisaryDatabase {
   VisaryDatabase(super.e);
 
@@ -95,7 +116,7 @@ class VisaryDatabase extends _$VisaryDatabase {
       VisaryDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   /// Foreign key constraint harus diaktifkan eksplisit di SQLite,
   /// kalau tidak cascading delete tidak jalan.
@@ -106,6 +127,9 @@ class VisaryDatabase extends _$VisaryDatabase {
   /// v2→v3: kolom audio — projects.audio_mode + active_audio_asset_id,
   /// assets.duration_sec + audio_format (PRD-SPRINT-10). Aditif (ALTER ADD
   /// COLUMN nullable), data lama tetap.
+  ///
+  /// v3→v4: tabel transcripts baru (PRD-SPRINT-15). Additive (CREATE TABLE),
+  /// tidak sentuh tabel existing.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onUpgrade: (m, from, to) async {
@@ -123,6 +147,9 @@ class VisaryDatabase extends _$VisaryDatabase {
                 projectsTable, projectsTable.activeAudioAssetId);
             await m.addColumn(assetsTable, assetsTable.durationSec);
             await m.addColumn(assetsTable, assetsTable.audioFormat);
+          }
+          if (from < 4) {
+            await m.createTable(transcriptsTable);
           }
         },
         beforeOpen: (details) async {
@@ -171,7 +198,22 @@ class VisaryDatabase extends _$VisaryDatabase {
     }
   }
 
-  /// Hapus project. Clip & asset ikut terhapus lewat ON DELETE CASCADE.
+  /// Hapus project. Clip, asset & transcript ikut terhapus lewat ON DELETE CASCADE.
   Future<void> deleteProject(String id) =>
       (delete(projectsTable)..where((t) => t.id.equals(id))).go();
+
+  // ── Transcript (PRD-SPRINT-15 §2.3) ──
+
+  Future<TranscriptRow?> getTranscript(String projectId) =>
+      (select(transcriptsTable)
+            ..where((t) => t.projectId.equals(projectId)))
+          .getSingleOrNull();
+
+  Future<void> upsertTranscript(TranscriptsTableCompanion row) =>
+      into(transcriptsTable).insertOnConflictUpdate(row);
+
+  Future<void> deleteTranscript(String projectId) =>
+      (delete(transcriptsTable)
+            ..where((t) => t.projectId.equals(projectId)))
+          .go();
 }

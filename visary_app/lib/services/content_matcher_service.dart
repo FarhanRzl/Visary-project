@@ -27,7 +27,8 @@ class ContentMatcherService {
     for (final path in framePaths) {
       try {
         final bytes = await File(path).readAsBytes();
-        final b64 = base64Encode(bytes);
+        // Strip MIME line wrapping — Gemini inline_data rejects wrapped base64.
+        final b64 = base64Encode(bytes).replaceAll('\n', '');
         final desc = await _ai.visionPrompt(
           prompt: 'Describe what is shown in this image in one concise sentence.',
           imageBase64: b64,

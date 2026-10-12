@@ -5,27 +5,72 @@ import 'package:drift/drift.dart';
 import '../../models/models.dart';
 import 'database.dart';
 
-/// Konversi model domain <-> baris Drift. Tetap terpisah dari model supaya
-/// layer domain tidak bergantung pada Drift.
-class ProjectMapper {
-  static String _partsToJson(List<ClipPart> parts) =>
-      jsonEncode(parts.map((p) => [p.start, p.end]).toList());
+/// Konversi Transcript ↔ DB row (PRD-SPRINT-15 §2.3).
+class TranscriptMapper {
+  static String _wordsToJson(List<WordToken> words) => jsonEncode(
+      words.map((w) => {'word': w.word, 'start': w.start, 'end': w.end}).toList());
 
-  static List<ClipPart> _partsFromJson(String s) {
+  static List<WordToken> _wordsFromJson(String s) {
     final raw = jsonDecode(s) as List;
     return raw
-        .map((e) => ClipPart(
-              (e[0] as num).toDouble(),
-              (e[1] as num).toDouble(),
+        .map((e) => WordToken(
+              word: (e['word'] as String?) ?? '',
+              start: ((e['start'] as num?) ?? 0).toDouble(),
+              end: ((e['end'] as num?) ?? 0).toDouble(),
             ))
         .toList();
   }
 
-  static String _partToJson(ClipPart p) => jsonEncode([p.start, p.end]);
+  static TranscriptsTableCompanion transcriptToRow(
+    String projectId,
+    Transcript t, {
+    String? assetId,
+  }) =>
+      TranscriptsTableCompanion.insert(
+        projectId: projectId,
+        assetId: Value(assetId),
+        fullText: t.fullText,
+        wordsJson: _wordsToJson(t.words),
+        language: Value(t.language),
+        provider: t.provider,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+      );
+
+  static Transcript transcriptFromRow(TranscriptRow r) => Transcript(
+        fullText: r.fullText,
+        words: _wordsFromJson(r.wordsJson),
+        language: r.language,
+        provider: r.provider,
+      );
+}
+
+/// Konversi model domain <-> baris Drift. Tetap terpisah dari model supaya
+/// layer domain tidak bergantung pada Drift.
+class ProjectMapper {
+  static String _partsToJson(List<ClipPart> parts) =>
+      jsonEncode(parts.map((p) => [p.start, p.end, p.speed]).toList());
+
+  static List<ClipPart> _partsFromJson(String s) {
+    final raw = jsonDecode(s) as List;
+    return raw.map((e) {
+      final arr = e as List;
+      // Speed is optional (index 2) for backward compat with data stored
+      // before PRD-SPRINT-15. Old format: [start, end]. New: [start, end, speed].
+      final speed = arr.length > 2 ? (arr[2] as num).toDouble() : 1.0;
+      return ClipPart(
+        (arr[0] as num).toDouble(),
+        (arr[1] as num).toDouble(),
+        speed,
+      );
+    }).toList();
+  }
+
+  static String _partToJson(ClipPart p) => jsonEncode([p.start, p.end, p.speed]);
 
   static ClipPart _partFromJson(String s) {
     final e = jsonDecode(s) as List;
-    return ClipPart((e[0] as num).toDouble(), (e[1] as num).toDouble());
+    final speed = e.length > 2 ? (e[2] as num).toDouble() : 1.0;
+    return ClipPart((e[0] as num).toDouble(), (e[1] as num).toDouble(), speed);
   }
 
   static ProjectsTableCompanion projectToRow(Project p) {
@@ -181,4 +226,24 @@ class ProjectRepository {
 
   Future<Set<String>> allIds() async =>
       (await db.getAllProjects()).map((r) => r.id).toSet();
+
+  // ── Transcript (PRD-SPRINT-15 §2.3) ──
+
+  Future<Transcript?> loadTranscript(String projectId) async {
+    final row = await db.getTranscript(projectId);
+    if (row == null) return null;
+    return TranscriptMapper.transcriptFromRow(row);
+  }
+
+  Future<void> saveTranscript(
+    String projectId,
+    Transcript t, {
+    String? assetId,
+  }) async {
+    await db.upsertTranscript(
+        TranscriptMapper.transcriptToRow(projectId, t, assetId: assetId));
+  }
+
+  Future<void> deleteTranscript(String projectId) =>
+      db.deleteTranscript(projectId);
 }
